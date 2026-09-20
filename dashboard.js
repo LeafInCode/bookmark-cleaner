@@ -3,7 +3,7 @@ import * as storage from "./lib/storage.js";
 import * as bm from "./lib/bookmarks.js";
 import * as permissions from "./lib/permissions.js";
 import { buildPortrait, buildTimeSeries } from "./lib/stats.js";
-import { exportBackup, exportReportCsv, exportSharePage, exportTree, stamp } from "./lib/export.js";
+import { exportBackup, exportReportCsv, exportShareImage, exportSharePage, exportTree, stamp } from "./lib/export.js";
 import { STATUS } from "./lib/linkcheck.js";
 import { normalizeUrl } from "./lib/url.js";
 
@@ -1497,19 +1497,36 @@ function showShareTitleModal(items) {
        <label>${i18n.t("shareTitleLabel")}</label>
        <input id="share-title" class="select" value="${escapeHtml(defaultTitle)}">
      </div>
+     <div class="form-row">
+       <label>${i18n.t("themeLabel")}</label>
+       <select id="share-theme" class="select">
+         <option value="gradient">${i18n.t("themeGradient")}</option>
+         <option value="minimal">${i18n.t("themeMinimal")}</option>
+         <option value="paper">${i18n.t("themePaper")}</option>
+         <option value="dark">${i18n.t("themeDark")}</option>
+       </select>
+     </div>
      <div class="modal-actions">
        <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
-       <button class="btn primary" data-modal="ok">${i18n.t("confirm")}</button>
+       <button class="btn" id="share-poster">${i18n.t("exportPoster")}</button>
+       <button class="btn primary" id="share-html">${i18n.t("exportHtml")}</button>
      </div>`,
     (root, close) => {
       const input = root.querySelector("#share-title");
+      const themeSel = root.querySelector("#share-theme");
       input.focus();
       input.select();
       root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
-      root.querySelector('[data-modal="ok"]').addEventListener("click", () => {
+      root.querySelector("#share-html").addEventListener("click", () => {
         const title = (input.value || "").trim() || defaultTitle;
         close();
-        exportSharePage(items, title, stamp());
+        exportSharePage(items, title, stamp(), themeSel.value);
+        toast(i18n.t("exportDone"));
+      });
+      root.querySelector("#share-poster").addEventListener("click", () => {
+        const title = (input.value || "").trim() || defaultTitle;
+        close();
+        exportShareImage(items, title, stamp());
         toast(i18n.t("exportDone"));
       });
     }
