@@ -13,7 +13,8 @@ const state = {
   emptyFolders: [],
   activeTab: "dead",
   selection: { dead: new Set(), duplicates: new Set(), empty: new Set(), moved: new Set(), blocked: new Set() },
-  wayback: {}
+  wayback: {},
+  updated: new Set()
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -22,11 +23,13 @@ function resultOf(id) {
   return state.scan && state.scan.results ? state.scan.results[id] : null;
 }
 
+const UNVERIFIABLE = [STATUS.BLOCKED, STATUS.UNKNOWN, STATUS.SERVER_ERROR, STATUS.TIMEOUT];
+
 function deadIds() {
   return state.items
     .filter((b) => {
       const r = resultOf(b.id);
-      return r && [STATUS.DEAD, STATUS.TIMEOUT, STATUS.SERVER_ERROR].includes(r.status);
+      return r && r.status === STATUS.DEAD;
     })
     .map((b) => b.id);
 }
@@ -41,7 +44,7 @@ function movedItems() {
 function blockedItems() {
   return state.items.filter((b) => {
     const r = resultOf(b.id);
-    return r && [STATUS.BLOCKED, STATUS.UNKNOWN].includes(r.status);
+    return r && UNVERIFIABLE.includes(r.status);
   });
 }
 
@@ -102,9 +105,9 @@ function renderScanStatus() {
     btn.disabled = false;
     if (s.status === "done") {
       const r = s.results || {};
-      const dead = Object.values(r).filter((x) => [STATUS.DEAD, STATUS.TIMEOUT, STATUS.SERVER_ERROR].includes(x.status)).length;
+      const dead = Object.values(r).filter((x) => x.status === STATUS.DEAD).length;
       const moved = Object.values(r).filter((x) => x.status === STATUS.MOVED).length;
-      const blocked = Object.values(r).filter((x) => [STATUS.BLOCKED, STATUS.UNKNOWN].includes(x.status)).length;
+      const blocked = Object.values(r).filter((x) => UNVERIFIABLE.includes(x.status)).length;
       $("#summary").textContent = i18n.t("scanSummary", {
         total: s.total || 0,
         dead,
@@ -177,33 +180,69 @@ function renderToolbar(extraButtons) {
     </div>`;
 }
 
+function noteLabel(note) {
+  const map = {
+    login_required: "noteLogin",
+    forbidden: "noteForbidden",
+    rate_limited: "noteRateLimited",
+    server_error: "noteServerError",
+    timeout: "noteTimeout",
+    network: "noteNetwork",
+    not_found: "noteNotFound",
+    auth: "noteAuth",
+    method: "noteMethod",
+    legal: "noteLegal",
+    redirect: "noteRedirect",
+    unknown: "noteUnknown"
+  };
+  return note && map[note] ? i18n.t(map[note]) : "";
+}
+
+function stripeClass(b, r) {
+  if (state.updated.has(b.id)) return " stripe-ok";
+  if (!r || !r.status) return "";
+  if (r.status === STATUS.DEAD) return " stripe-dead";
+  if (UNVERIFIABLE.includes(r.status)) return " stripe-blocked";
+  if (r.status === STATUS.MOVED) return " stripe-moved";
+  if (r.status === STATUS.OK) return " stripe-ok";
+  return "";
+}
+
 function renderItemRow(b, opts) {
   const r = resultOf(b.id) || {};
   const sel = state.selection[state.activeTab];
   const checked = sel.has(b.id) ? "checked" : "";
-  const tag = r.status ? tagFor(r.status) : "";
+  const tag = state.updated.has(b.id)
+    ? `<span class="tag ok">${i18n.t("tagUpdated")}</span>`
+    : (r.status ? tagFor(r.status) : "");
+  const note = noteLabel(r.note);
+  const noteHtml = note ? `<span class="muted small">${note}</span>` : "";
   const actions = opts && opts.actions ? opts.actions(b, r) : "";
   const path = b.path ? `<span class="muted small">${escapeHtml(b.path)}</span>` : "";
   return `
-    <div class="item" data-id="${b.id}">
+    <div class="item${stripeClass(b, r)}" data-id="${b.id}">
       <input type="checkbox" data-check="${b.id}" ${checked}>
       <div class="item-main">
         <div class="item-title" title="${escapeHtml(b.title)}">${escapeHtml(b.title || b.url)}</div>
         <div class="item-url">${escapeHtml(b.url || "")}</div>
-        <div class="item-meta">${tag}${path}${opts && opts.extra ? opts.extra(b, r) : ""}</div>
+        <div class="item-meta">${tag}${noteHtml}${path}${opts && opts.extra ? opts.extra(b, r) : ""}</div>
       </div>
       <div class="item-actions">${actions}</div>
     </div>`;
 }
 
+function hint(textKey) {
+  return `<div class="hint">${i18n.t(textKey)}</div>`;
+}
+
 function renderDeadPanel() {
   const items = state.items.filter((b) => {
     const r = resultOf(b.id);
-    return r && [STATUS.DEAD, STATUS.TIMEOUT, STATUS.SERVER_ERROR].includes(r.status);
+    return r && r.status === STATUS.DEAD;
   });
-  if (!items.length) return emptyState();
+  if (!items.length) return hint("hintDead") + emptyState();
   const buttons = `<button class="btn small" data-action="archive-dead">${i18n.t("archive")}</button>`;
-  return renderToolbar(buttons) + `<div class="list">${items.map((b) => {
+  return renderToolbar(buttons) + hint("hintDead") + `<div class="list">${items.map((b) => {
     const r = resultOf(b.id) || {};
     const wb = state.wayback[b.id];
     let extra = "";
@@ -226,22 +265,24 @@ function renderDeadPanel() {
 
 function renderMovedPanel() {
   const items = movedItems();
-  if (!items.length) return emptyState();
-  return renderToolbar("") + `<div class="list">${items.map((b) => {
+  if (!items.length) return hint("hintMoved") + emptyState();
+  return renderToolbar("") + hint("hintMoved") + `<div class="list">${items.map((b) => {
     const r = resultOf(b.id) || {};
+    const done = state.updated.has(b.id);
     return renderItemRow(b, {
       extra: () => `<span class="muted small">${i18n.t("movedTo")}: ${escapeHtml(r.movedTo || "")}</span>`,
-      actions: (bb) => `
-        <button class="btn small" data-action="update-url" data-id="${bb.id}" data-url="${escapeHtml(r.movedTo || "")}">${i18n.t("updateUrl")}</button>
-        <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(r.movedTo || bb.url)}">↗</button>`
+      actions: (bb) => done
+        ? `<button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(r.movedTo || bb.url)}">↗</button>`
+        : `<button class="btn small" data-action="update-url" data-id="${bb.id}" data-url="${escapeHtml(r.movedTo || "")}">${i18n.t("updateUrl")}</button>
+           <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(r.movedTo || bb.url)}">↗</button>`
     });
   }).join("")}</div>`;
 }
 
 function renderBlockedPanel() {
   const items = blockedItems();
-  if (!items.length) return emptyState();
-  return renderToolbar("") + `<div class="list">${items.map((b) =>
+  if (!items.length) return hint("hintBlocked") + emptyState();
+  return renderToolbar("") + hint("hintBlocked") + `<div class="list">${items.map((b) =>
     renderItemRow(b, {
       actions: (bb) => `<button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(bb.url)}">↗</button>`
     })
@@ -289,10 +330,8 @@ function renderEmptyPanel() {
 }
 
 function renderPortraitPanel() {
-  const bookmarks = state.items.filter((x) => x.type === "bookmark");
   const p = buildPortrait(state.items, state.scan ? state.scan.results : null, state.duplicates);
   const maxDomain = p.topDomains.length ? p.topDomains[0].count : 1;
-  const maxMonth = p.monthly.length ? Math.max(...p.monthly.map((m) => m[1])) : 1;
   const fmtDate = (b) => (b && b.dateAdded ? new Date(b.dateAdded).toLocaleDateString() : "—");
   const domains = p.topDomains.map((d) => `
     <div class="bar-row">
@@ -300,23 +339,68 @@ function renderPortraitPanel() {
       <span class="bar"><div style="width:${Math.round((d.count / maxDomain) * 100)}%"></div></span>
       <span class="val">${d.count}</span>
     </div>`).join("");
-  const months = p.monthly.map(([m, c]) => `
-    <div class="bar-row">
-      <span class="name">${m}</span>
-      <span class="bar"><div style="width:${Math.round((c / maxMonth) * 100)}%"></div></span>
-      <span class="val">${c}</span>
-    </div>`).join("");
+  const chart = svgAreaChart(p.monthly);
+  const years = p.yearCounts.map(([y, c]) => `<span class="year-chip">${y}<b>${c}</b></span>`).join("");
   return `
     <div class="portrait-grid">
-      <div class="stat-card"><div class="num">${p.totalBookmarks}</div><div class="label">${i18n.t("totalBookmarks")}</div></div>
-      <div class="stat-card"><div class="num">${p.totalFolders}</div><div class="label">${i18n.t("folders")}</div></div>
-      <div class="stat-card"><div class="num">${p.deadCount}</div><div class="label">${i18n.t("deadLinks")} (${(p.deadRatio * 100).toFixed(1)}%)</div></div>
-      <div class="stat-card"><div class="num">${p.duplicateCount}</div><div class="label">${i18n.t("duplicates")}</div></div>
-      <div class="stat-card"><div class="num">${fmtDate(p.oldest)}</div><div class="label">${i18n.t("portraitOldest")}</div></div>
-      <div class="stat-card"><div class="num">${fmtDate(p.newest)}</div><div class="label">${i18n.t("portraitNewest")}</div></div>
+      <div class="stat-card grad-blue"><div class="num">${p.totalBookmarks}</div><div class="label">${i18n.t("totalBookmarks")}</div></div>
+      <div class="stat-card grad-purple"><div class="num">${p.totalFolders}</div><div class="label">${i18n.t("folders")}</div></div>
+      <div class="stat-card grad-red"><div class="num">${p.deadCount}<span class="unit">(${(p.deadRatio * 100).toFixed(1)}%)</span></div><div class="label">${i18n.t("deadLinks")}</div></div>
+      <div class="stat-card grad-amber"><div class="num">${p.duplicateCount}</div><div class="label">${i18n.t("duplicates")}</div></div>
+      <div class="stat-card grad-green"><div class="num">${p.spanDays}<span class="unit">${i18n.t("portraitDays")}</span></div><div class="label">${i18n.t("portraitSpan")}</div></div>
+      <div class="stat-card grad-cyan"><div class="num">${p.avgPerMonth}</div><div class="label">${i18n.t("portraitAvgMonth")}</div></div>
     </div>
-    <div class="card"><h3>${i18n.t("portraitTopDomains")}</h3>${domains || `<div class="muted small">${i18n.t("noItems")}</div>`}</div>
-    <div class="card"><h3>${i18n.t("portraitMonthly")}</h3>${months || `<div class="muted small">${i18n.t("noItems")}</div>`}</div>`;
+    <div class="card">
+      <h3>${i18n.t("portraitMonthly")}</h3>
+      ${chart || `<div class="muted small">${i18n.t("noItems")}</div>`}
+      <div class="year-row">${years}</div>
+      ${p.mostActive ? `<div class="muted small">${i18n.t("portraitMostActive")}: ${p.mostActive[0]} (${p.mostActive[1]}) · ${i18n.t("portraitOldest")}: ${fmtDate(p.oldest)} · ${i18n.t("portraitNewest")}: ${fmtDate(p.newest)}</div>` : ""}
+    </div>
+    <div class="card"><h3>${i18n.t("portraitTopDomains")}</h3>${domains || `<div class="muted small">${i18n.t("noItems")}</div>`}</div>`;
+}
+
+function svgAreaChart(points) {
+  if (!points || points.length < 2) return "";
+  const w = 660;
+  const h = 180;
+  const padL = 36;
+  const padR = 14;
+  const padT = 16;
+  const padB = 30;
+  const max = Math.max(...points.map((x) => x[1]), 1);
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
+  const step = innerW / (points.length - 1);
+  const coords = points.map(([, v], i) => [padL + i * step, padT + innerH - (v / max) * innerH]);
+  const line = coords.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `${line} L${coords[coords.length - 1][0].toFixed(1)},${(padT + innerH).toFixed(1)} L${coords[0][0].toFixed(1)},${(padT + innerH).toFixed(1)} Z`;
+  const grid = [0, 0.5, 1].map((t) => {
+    const y = padT + innerH - t * innerH;
+    return `<line x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" class="chart-grid"/>
+      <text x="${padL - 6}" y="${y + 4}" class="chart-axis" text-anchor="end">${Math.round(max * t)}</text>`;
+  }).join("");
+  const every = Math.max(1, Math.ceil(points.length / 8));
+  const labels = points.map(([label], i) => {
+    if (i % every !== 0 && i !== points.length - 1) return "";
+    const x = padL + i * step;
+    return `<text x="${x.toFixed(1)}" y="${h - 8}" class="chart-axis" text-anchor="middle">${escapeHtml(label.slice(2))}</text>`;
+  }).join("");
+  const dots = coords.map(([x, y], i) =>
+    `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="chart-dot"><title>${escapeHtml(points[i][0])}: ${points[i][1]}</title></circle>`
+  ).join("");
+  return `<svg viewBox="0 0 ${w} ${h}" class="chart" preserveAspectRatio="xMidYMid meet" role="img">
+    <defs>
+      <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#2563eb" stop-opacity="0.38"/>
+        <stop offset="100%" stop-color="#2563eb" stop-opacity="0.02"/>
+      </linearGradient>
+    </defs>
+    ${grid}
+    <path d="${area}" fill="url(#areaFill)"/>
+    <path d="${line}" fill="none" class="chart-line"/>
+    ${dots}
+    ${labels}
+  </svg>`;
 }
 
 function emptyState() {
@@ -372,7 +456,12 @@ async function deleteSelected() {
   state.selection[tab].clear();
   await refreshData();
   renderAll();
-  toast(i18n.t("deleteDone", { n: trashEntries.length }) + (errors.length ? ` (${errors.length} ✗)` : ""));
+  if (errors.length && !trashEntries.length) {
+    const rootErr = errors.some((e) => e.message === "root-folder");
+    toast(rootErr ? i18n.t("rootFolderErr") : `${errors.length} ✗`);
+  } else {
+    toast(i18n.t("deleteDone", { n: trashEntries.length }) + (errors.length ? ` (${errors.length} ✗)` : ""));
+  }
 }
 
 function confirmModal(message) {
@@ -548,6 +637,7 @@ function bindEvents() {
       const url = btn.getAttribute("data-url");
       if (url) {
         await bm.updateBookmarkUrl(id, url);
+        state.updated.add(id);
         await refreshData();
         renderAll();
         toast(i18n.t("updated"));
@@ -567,6 +657,7 @@ function bindEvents() {
       const wb = state.wayback[id];
       if (!wb) return;
       await bm.updateBookmarkUrl(id, wb.url);
+      state.updated.add(id);
       await refreshData();
       renderAll();
       toast(i18n.t("updated"));

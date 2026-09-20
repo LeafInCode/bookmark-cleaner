@@ -20,7 +20,7 @@ async function render() {
   };
   walk(tree);
   const results = scanState && scanState.results ? Object.values(scanState.results) : [];
-  const dead = results.filter((r) => r.status === "dead" || r.status === "timeout").length;
+  const dead = results.filter((r) => r.status === "dead").length;
   const moved = results.filter((r) => r.status === "moved").length;
   stats.innerHTML = `
     <div class="popup-stat"><div class="num">${total}</div><div class="label">${i18n.t("totalBookmarks")}</div></div>
