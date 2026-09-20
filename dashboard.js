@@ -191,20 +191,27 @@ function renderExcludedHint() {
 function showSettings() {
   const s = state.settings || {};
   const excluded = s.excludedFolders || [];
+  const fmtTime = (ts) => (ts ? new Date(ts).toLocaleString() : i18n.t("never"));
   openModal(
     `<h3>${i18n.t("settingsTitle")}</h3>
      <div class="form-row" style="align-items:flex-start">
        <label>${i18n.t("excludedFoldersLabel")}</label>
        <input id="excluded-input" class="select" value="${escapeHtml(excluded.join(", "))}">
      </div>
-     <div class="muted small" style="margin:-4px 0 12px 100px">${i18n.t("excludedFoldersHint")}</div>
-     <label class="small" style="display:block;margin:10px 0">
+     <div class="muted small" style="margin:-4px 0 12px 100px">
+       ${i18n.t("excludedFoldersHint")}<br>${i18n.t("excludedNoRegex")}
+     </div>
+     <label class="small" style="display:block;margin:10px 0 4px">
        <input type="checkbox" id="set-weekly-scan" ${s.weeklyScan ? "checked" : ""}> ${i18n.t("weeklyScanLabel")}
      </label>
-     <label class="small" style="display:block;margin:10px 0">
+     <div class="muted small" style="margin-left:22px">${i18n.t("weeklyScanHint")}</div>
+     <label class="small" style="display:block;margin:12px 0 4px">
        <input type="checkbox" id="set-auto-backup" ${s.autoBackup ? "checked" : ""}> ${i18n.t("autoBackupLabel")}
      </label>
      <div class="muted small" style="margin-left:22px">${i18n.t("autoBackupHint")}</div>
+     <div class="muted small" style="margin-top:12px">
+       ${i18n.t("lastScanLabel")}: ${fmtTime(s.lastScanAt)} · ${i18n.t("lastBackupLabel")}: ${fmtTime(s.lastAutoBackup)}
+     </div>
      <div class="modal-actions">
        <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
        <button class="btn primary" data-modal="ok">${i18n.t("save")}</button>
@@ -213,10 +220,18 @@ function showSettings() {
       root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
       root.querySelector('[data-modal="ok"]').addEventListener("click", async () => {
         const raw = root.querySelector("#excluded-input").value || "";
+        const seen = new Set();
         const list = raw
-          .split(/[,，、]/)
+          .split(/[,，、;；]/)
           .map((x) => x.trim())
-          .filter(Boolean);
+          .filter((x) => x && x.length <= 50)
+          .filter((x) => {
+            const key = x.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 20);
         const weeklyScan = root.querySelector("#set-weekly-scan").checked;
         let autoBackup = root.querySelector("#set-auto-backup").checked;
         if (autoBackup) {
@@ -1510,20 +1525,28 @@ function showShareTitleModal(items) {
   const defaultTitle = domains.size === 1
     ? i18n.t("shareTitleDomain", { domain: [...domains][0] })
     : i18n.t("shareTitleDefault");
+  const themeNames = {
+    gradient: i18n.t("themeGradient"),
+    minimal: i18n.t("themeMinimal"),
+    paper: i18n.t("themePaper"),
+    dark: i18n.t("themeDark")
+  };
+  let selectedTheme = "gradient";
   openModal(
     `<h3>${i18n.t("exportShare")}</h3>
      <div class="form-row">
        <label>${i18n.t("shareTitleLabel")}</label>
        <input id="share-title" class="select" value="${escapeHtml(defaultTitle)}">
      </div>
-     <div class="form-row">
+     <div class="form-row" style="align-items:flex-start">
        <label>${i18n.t("themeLabel")}</label>
-       <select id="share-theme" class="select">
-         <option value="gradient">${i18n.t("themeGradient")}</option>
-         <option value="minimal">${i18n.t("themeMinimal")}</option>
-         <option value="paper">${i18n.t("themePaper")}</option>
-         <option value="dark">${i18n.t("themeDark")}</option>
-       </select>
+       <div class="theme-picker" id="share-theme">
+         ${Object.keys(themeNames).map((t) => `
+           <button class="theme-opt ${t === selectedTheme ? "active" : ""}" data-theme="${t}" title="${themeNames[t]}">
+             <span class="theme-thumb thumb-${t}"><span class="thumb-dot"></span><span class="thumb-card"></span></span>
+             <span class="theme-name">${themeNames[t]}</span>
+           </button>`).join("")}
+       </div>
      </div>
      <div class="modal-actions">
        <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
@@ -1532,14 +1555,21 @@ function showShareTitleModal(items) {
      </div>`,
     (root, close) => {
       const input = root.querySelector("#share-title");
-      const themeSel = root.querySelector("#share-theme");
       input.focus();
       input.select();
+      root.querySelector("#share-theme").addEventListener("click", (e) => {
+        const opt = e.target.closest("[data-theme]");
+        if (!opt) return;
+        selectedTheme = opt.getAttribute("data-theme");
+        root.querySelectorAll(".theme-opt").forEach((el) => {
+          el.classList.toggle("active", el.getAttribute("data-theme") === selectedTheme);
+        });
+      });
       root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
       root.querySelector("#share-html").addEventListener("click", () => {
         const title = (input.value || "").trim() || defaultTitle;
         close();
-        exportSharePage(items, title, stamp(), themeSel.value);
+        exportSharePage(items, title, stamp(), selectedTheme);
         toast(i18n.t("exportDone"));
       });
       root.querySelector("#share-poster").addEventListener("click", () => {
