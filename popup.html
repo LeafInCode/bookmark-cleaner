@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>书签清理助手</title>
+  <link rel="stylesheet" href="styles/common.css">
+  <link rel="stylesheet" href="styles/popup.css">
+</head>
+<body class="popup-body">
+  <div class="popup">
+    <div class="popup-brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="2" y="2" width="20" height="20" rx="5" fill="#2563eb"/>
+        <path d="M9 6h6v12l-3-2.4L9 18V6z" fill="#fff"/>
+      </svg>
+      <strong data-i18n="appName">书签清理助手</strong>
+    </div>
+    <div id="stats" class="popup-stats"></div>
+    <div class="popup-actions">
+      <button id="btn-scan" class="btn primary" data-i18n="quickScan">快速扫描</button>
+      <button id="btn-dashboard" class="btn ghost" data-i18n="openDashboard">打开仪表盘</button>
+    </div>
+    <div class="privacy small muted" data-i18n="privacyNote"></div>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

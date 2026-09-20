@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>书签清理助手</title>
+  <link rel="stylesheet" href="styles/common.css">
+  <link rel="stylesheet" href="styles/dashboard.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="2" y="2" width="20" height="20" rx="5" fill="#2563eb"/>
+        <path d="M9 6h6v12l-3-2.4L9 18V6z" fill="#fff"/>
+      </svg>
+      <span data-i18n="appName">书签清理助手</span>
+    </div>
+    <div class="top-actions">
+      <button id="btn-backup" class="btn ghost" data-i18n="exportBackup">导出备份</button>
+      <button id="btn-report" class="btn ghost" data-i18n="exportReport">导出报告</button>
+      <button id="btn-share" class="btn ghost" data-i18n="exportShare">导出分享页</button>
+      <button id="btn-trash" class="btn ghost" data-i18n="trash">回收站</button>
+      <select id="lang-select" class="select">
+        <option value="zh">中文</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card scan-card">
+      <div class="scan-row">
+        <button id="btn-scan" class="btn primary" data-i18n="scan">开始扫描</button>
+        <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+        <span id="scan-status" class="muted small"></span>
+      </div>
+      <div id="summary" class="muted small"></div>
+    </section>
+
+    <nav class="tabs" id="tabs"></nav>
+    <section id="panel" class="panel"></section>
+  </main>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root"></div>
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

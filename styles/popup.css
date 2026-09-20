@@ -1,0 +1,31 @@
+.popup-body { width: 320px; }
+
+.popup { padding: 14px; }
+
+.popup-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.popup-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.popup-stat {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  text-align: center;
+}
+.popup-stat .num { font-size: 18px; font-weight: 700; }
+.popup-stat .label { font-size: 11px; color: var(--muted); }
+
+.popup-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+.popup-actions .btn { flex: 1; }
+
+.privacy { font-size: 11px; text-align: center; }
