@@ -45,6 +45,18 @@
   flex-wrap: wrap;
   margin-bottom: 14px;
 }
+
+.list-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.list-controls .search { flex: 1; min-width: 180px; }
+
+.show-more {
+  text-align: center;
+  margin: 14px 0 4px;
+}
 .tab {
   border: 1px solid var(--border);
   background: var(--card);

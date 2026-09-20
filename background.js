@@ -143,7 +143,13 @@ const FATAL_ERRORS = [
   "INTERNET_DISCONNECTED"
 ];
 
+const hasWebRequest = typeof chrome.webRequest !== "undefined" && !!chrome.webRequest.onCompleted;
+const hasWebNavigation = typeof chrome.webNavigation !== "undefined" && !!chrome.webNavigation.onErrorOccurred;
+
 function verifyInBrowser(url) {
+  if (!hasWebRequest || !hasWebNavigation) {
+    return Promise.resolve({ status: STATUS.BLOCKED, error: "permission", note: "browser_unverified" });
+  }
   return new Promise((resolve) => {
     let done = false;
     let tabId = null;

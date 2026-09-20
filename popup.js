@@ -1,5 +1,5 @@
 import * as i18n from "./lib/i18n.js";
-import * as storage from "./lib/storage.js";
+import * as permissions from "./lib/permissions.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -35,6 +35,11 @@ async function render() {
 }
 
 $("#btn-scan").addEventListener("click", async () => {
+  const granted = await permissions.ensureScanPermissions();
+  if (!granted) {
+    $("#btn-scan").textContent = i18n.t("permissionDenied");
+    return;
+  }
   await chrome.runtime.sendMessage({ type: "scan:start" });
   await render();
 });

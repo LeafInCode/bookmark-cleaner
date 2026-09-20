@@ -18,6 +18,8 @@
     </div>
     <div class="top-actions">
       <button id="btn-backup" class="btn ghost" data-i18n="exportBackup">导出备份</button>
+      <button id="btn-import" class="btn ghost" data-i18n="importBackup">导入备份</button>
+      <input id="import-file" type="file" accept=".json,application/json" hidden>
       <button id="btn-report" class="btn ghost" data-i18n="exportReport">导出报告</button>
       <button id="btn-share" class="btn ghost" data-i18n="exportShare">导出分享页</button>
       <button id="btn-trash" class="btn ghost" data-i18n="trash">回收站</button>
@@ -39,6 +41,10 @@
     </section>
 
     <nav class="tabs" id="tabs"></nav>
+    <div id="list-controls" class="list-controls">
+      <input id="search-input" class="select search" type="search">
+      <select id="sort-select" class="select"></select>
+    </div>
     <section id="panel" class="panel"></section>
   </main>
 

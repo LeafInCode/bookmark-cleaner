@@ -1,6 +1,7 @@
 import * as i18n from "./lib/i18n.js";
 import * as storage from "./lib/storage.js";
 import * as bm from "./lib/bookmarks.js";
+import * as permissions from "./lib/permissions.js";
 import { buildPortrait } from "./lib/stats.js";
 import { exportBackup, exportReportCsv, exportSharePage, stamp } from "./lib/export.js";
 import { STATUS } from "./lib/linkcheck.js";
@@ -15,7 +16,10 @@ const state = {
   selection: { dead: new Set(), duplicates: new Set(), empty: new Set(), moved: new Set(), blocked: new Set() },
   wayback: {},
   updated: new Set(),
-  portraitYear: "all"
+  portraitYear: "all",
+  search: "",
+  sort: "default",
+  limit: 100
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -51,6 +55,26 @@ function blockedItems() {
 
 function dupItemIds() {
   return state.duplicates.flatMap((g) => g.items.map((x) => x.id));
+}
+
+function currentTabItems() {
+  switch (state.activeTab) {
+    case "dead":
+      return state.items.filter((b) => {
+        const r = resultOf(b.id);
+        return r && r.status === STATUS.DEAD;
+      });
+    case "duplicates":
+      return state.duplicates.flatMap((g) => g.items);
+    case "empty":
+      return state.emptyFolders;
+    case "moved":
+      return movedItems();
+    case "blocked":
+      return blockedItems();
+    default:
+      return [];
+  }
 }
 
 function currentTabIds() {
@@ -161,8 +185,48 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;");
 }
 
+function visibleItems(items) {
+  const q = (state.search || "").trim().toLowerCase();
+  let out = items;
+  if (q) {
+    out = out.filter((b) => [b.title, b.url, b.path].some((x) => (x || "").toLowerCase().includes(q)));
+  }
+  const s = state.sort || "default";
+  if (s === "title") out = [...out].sort((a, b) => String(a.title || "").localeCompare(String(b.title || "")));
+  else if (s === "newest") out = [...out].sort((a, b) => (b.dateAdded || 0) - (a.dateAdded || 0));
+  else if (s === "oldest") out = [...out].sort((a, b) => (a.dateAdded || 0) - (b.dateAdded || 0));
+  else if (s === "path") out = [...out].sort((a, b) => String(a.path || "").localeCompare(String(b.path || "")));
+  return out;
+}
+
+function paginate(items) {
+  const shown = items.slice(0, state.limit);
+  const rest = items.length - shown.length;
+  const more = rest > 0
+    ? `<div class="show-more"><button class="btn" data-action="show-more">${i18n.t("showMore")} (${i18n.t("remaining", { n: rest })})</button></div>`
+    : "";
+  return { shown, more };
+}
+
+function renderListControls() {
+  const show = state.activeTab !== "portrait";
+  const el = $("#list-controls");
+  el.style.display = show ? "flex" : "none";
+  if (!show) return;
+  const input = $("#search-input");
+  if (document.activeElement !== input) input.value = state.search || "";
+  input.placeholder = i18n.t("searchPlaceholder");
+  $("#sort-select").innerHTML = [
+    ["default", "sortDefault"],
+    ["title", "sortTitle"],
+    ["newest", "sortNewest"],
+    ["oldest", "sortOldest"],
+    ["path", "sortPath"]
+  ].map(([v, k]) => `<option value="${v}" ${state.sort === v ? "selected" : ""}>${i18n.t(k)}</option>`).join("");
+}
+
 function renderToolbar(extraButtons) {
-  const ids = currentTabIds();
+  const ids = visibleItems(currentTabItems()).map((x) => x.id);
   const sel = state.selection[state.activeTab];
   const allSelected = ids.length > 0 && ids.every((id) => sel.has(id));
   const buttons = extraButtons || "";
@@ -244,13 +308,14 @@ function hint(textKey) {
 }
 
 function renderDeadPanel() {
-  const items = state.items.filter((b) => {
+  const items = visibleItems(state.items.filter((b) => {
     const r = resultOf(b.id);
     return r && r.status === STATUS.DEAD;
-  });
+  }));
   if (!items.length) return hint("hintDead") + emptyState();
   const buttons = `<button class="btn small" data-action="archive-dead">${i18n.t("archive")}</button>`;
-  return renderToolbar(buttons) + hint("hintDead") + `<div class="list">${items.map((b) => {
+  const { shown, more } = paginate(items);
+  return renderToolbar(buttons) + hint("hintDead") + `<div class="list">${shown.map((b) => {
     const r = resultOf(b.id) || {};
     const wb = state.wayback[b.id];
     let extra = "";
@@ -268,13 +333,14 @@ function renderDeadPanel() {
       extra: () => extra,
       actions: (bb) => `<button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(bb.url)}">↗</button>`
     });
-  }).join("")}</div>`;
+  }).join("")}</div>` + more;
 }
 
 function renderMovedPanel() {
-  const items = movedItems();
+  const items = visibleItems(movedItems());
   if (!items.length) return hint("hintMoved") + emptyState();
-  return renderToolbar("") + hint("hintMoved") + `<div class="list">${items.map((b) => {
+  const { shown, more } = paginate(items);
+  return renderToolbar("") + hint("hintMoved") + `<div class="list">${shown.map((b) => {
     const r = resultOf(b.id) || {};
     const done = state.updated.has(b.id);
     return renderItemRow(b, {
@@ -284,24 +350,37 @@ function renderMovedPanel() {
         : `<button class="btn small" data-action="update-url" data-id="${bb.id}" data-url="${escapeHtml(r.movedTo || "")}">${i18n.t("updateUrl")}</button>
            <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(r.movedTo || bb.url)}">↗</button>`
     });
-  }).join("")}</div>`;
+  }).join("")}</div>` + more;
 }
 
 function renderBlockedPanel() {
-  const items = blockedItems();
+  const items = visibleItems(blockedItems());
   if (!items.length) return hint("hintBlocked") + emptyState();
-  return renderToolbar("") + hint("hintBlocked") + `<div class="list">${items.map((b) =>
+  const { shown, more } = paginate(items);
+  return renderToolbar("") + hint("hintBlocked") + `<div class="list">${shown.map((b) =>
     renderItemRow(b, {
       actions: (bb) => `
         <button class="btn small" data-action="browser-verify" data-id="${bb.id}">${i18n.t("browserVerify")}</button>
         <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(bb.url)}">↗</button>`
     })
-  ).join("")}</div>`;
+  ).join("")}</div>` + more;
 }
 
 function renderDuplicatesPanel() {
-  if (!state.duplicates.length) return emptyState();
-  const groups = state.duplicates.map((g) => {
+  const q = (state.search || "").trim().toLowerCase();
+  let groups = state.duplicates;
+  if (q) {
+    groups = groups.filter((g) =>
+      g.items.some((b) => [b.title, b.url, b.path].some((x) => (x || "").toLowerCase().includes(q)))
+    );
+  }
+  if (!groups.length) return emptyState();
+  const shownGroups = groups.slice(0, state.limit);
+  const rest = groups.length - shownGroups.length;
+  const more = rest > 0
+    ? `<div class="show-more"><button class="btn" data-action="show-more">${i18n.t("showMore")} (${i18n.t("remaining", { n: rest })})</button></div>`
+    : "";
+  const groupsHtml = shownGroups.map((g) => {
     const rows = g.items.map((b, idx) => {
       const sel = state.selection.duplicates;
       const checked = sel.has(b.id) ? "checked" : "";
@@ -322,13 +401,15 @@ function renderDuplicatesPanel() {
         <div class="dup-items">${rows}</div>
       </div>`;
   }).join("");
-  return renderToolbar("") + `<div class="list">${groups}</div>`;
+  return renderToolbar("") + `<div class="list">${groupsHtml}</div>` + more;
 }
 
 function renderEmptyPanel() {
-  if (!state.emptyFolders.length) return emptyState();
+  const items = visibleItems(state.emptyFolders);
+  if (!items.length) return emptyState();
   const sel = state.selection.empty;
-  const rows = state.emptyFolders.map((f) => `
+  const { shown, more } = paginate(items);
+  const rows = shown.map((f) => `
     <div class="item" data-id="${f.id}">
       <input type="checkbox" data-check="${f.id}" ${sel.has(f.id) ? "checked" : ""}>
       <div class="item-main">
@@ -336,7 +417,7 @@ function renderEmptyPanel() {
         <div class="item-url">${escapeHtml(f.path || "")}</div>
       </div>
     </div>`).join("");
-  return renderToolbar("") + `<div class="list">${rows}</div>`;
+  return renderToolbar("") + `<div class="list">${rows}</div>` + more;
 }
 
 function renderPortraitPanel() {
@@ -476,6 +557,7 @@ function renderPanel() {
 function renderAll() {
   renderTabs();
   renderScanStatus();
+  renderListControls();
   renderPanel();
 }
 
@@ -651,7 +733,19 @@ function bindEvents() {
     const tab = e.target.closest(".tab");
     if (!tab) return;
     state.activeTab = tab.getAttribute("data-tab");
+    state.limit = 100;
     renderAll();
+  });
+
+  $("#search-input").addEventListener("input", (e) => {
+    state.search = e.target.value;
+    state.limit = 100;
+    renderPanel();
+  });
+
+  $("#sort-select").addEventListener("change", (e) => {
+    state.sort = e.target.value;
+    renderPanel();
   });
 
   $("#panel").addEventListener("change", (e) => {
@@ -667,7 +761,9 @@ function bindEvents() {
     if (all) {
       const sel = state.selection[state.activeTab];
       sel.clear();
-      if (all.checked) currentTabIds().forEach((id) => sel.add(id));
+      if (all.checked) {
+        visibleItems(currentTabItems()).forEach((x) => sel.add(x.id));
+      }
       renderPanel();
     }
   });
@@ -683,6 +779,11 @@ function bindEvents() {
     if (!btn) return;
     const action = btn.getAttribute("data-action");
     const id = btn.getAttribute("data-id");
+    if (action === "show-more") {
+      state.limit += 100;
+      renderPanel();
+      return;
+    }
     if (action === "delete-selected") return deleteSelected();
     if (action === "open-selected") return openSelected();
     if (action === "move-selected") return moveSelected();
@@ -772,11 +873,40 @@ function bindEvents() {
       await chrome.runtime.sendMessage({ type: "scan:stop" });
       return;
     }
+    const granted = await permissions.ensureScanPermissions();
+    if (!granted) {
+      toast(i18n.t("permissionDenied"));
+      return;
+    }
     await chrome.runtime.sendMessage({ type: "scan:start" });
     setTimeout(async () => {
       state.scan = await storage.getScanState();
       renderScanStatus();
     }, 300);
+  });
+
+  $("#btn-import").addEventListener("click", () => $("#import-file").click());
+
+  $("#import-file").addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const roots = Array.isArray(data) ? data : [data];
+      const children = roots.flatMap((r) => r.children || []);
+      const ok = await confirmModal(`${i18n.t("importBackup")} → ${i18n.t("importFolder")}`);
+      if (!ok) return;
+      const folder = await bm.createFolder("1", `${i18n.t("importFolder")} ${new Date().toLocaleString()}`);
+      const existing = await bm.collectExistingUrlKeys();
+      const res = await bm.importTree(children, folder.id, existing);
+      await refreshData();
+      renderAll();
+      toast(i18n.t("importDone", res));
+    } catch (err) {
+      toast(String(err && err.message ? err.message : err));
+    }
   });
 
   $("#btn-backup").addEventListener("click", () => {
