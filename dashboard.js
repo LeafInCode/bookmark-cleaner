@@ -213,10 +213,15 @@ function showSettings() {
        ${i18n.t("lastScanLabel")}: ${fmtTime(s.lastScanAt)} · ${i18n.t("lastBackupLabel")}: ${fmtTime(s.lastAutoBackup)}
      </div>
      <div class="modal-actions">
+       <button class="btn" id="open-about">${i18n.t("about")}</button>
        <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
        <button class="btn primary" data-modal="ok">${i18n.t("save")}</button>
      </div>`,
     (root, close) => {
+      root.querySelector("#open-about").addEventListener("click", () => {
+        close();
+        showAbout();
+      });
       root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
       root.querySelector('[data-modal="ok"]').addEventListener("click", async () => {
         const raw = root.querySelector("#excluded-input").value || "";
@@ -1263,6 +1268,42 @@ async function undoEntry(entry) {
     return false;
   }
   return false;
+}
+
+function showAbout() {
+  const version = chrome.runtime.getManifest().version;
+  openModal(
+    `<h3>${i18n.t("appName")} <span class="muted small">v${escapeHtml(version)}</span></h3>
+     <p class="muted small">${i18n.t("aboutDesc")}</p>
+     <div class="about-links">
+       <a class="btn small tone-blue" href="https://github.com/LeafInCode/bookmark-cleaner" target="_blank" rel="noopener">${i18n.t("githubLink")}</a>
+       <a class="btn small tone-gray" href="${chrome.runtime.getURL("privacy.html")}" target="_blank" rel="noopener">${i18n.t("privacyLink")}</a>
+     </div>
+     <h3 style="margin-top:18px">🍋 ${i18n.t("supportTitle")}</h3>
+     <p class="muted small">${i18n.t("supportText")}</p>
+     <div class="support-box">
+       <img id="support-qr" class="support-qr" src="assets/support.png" alt="support">
+       <div id="support-placeholder" class="support-placeholder" hidden>${i18n.t("supportMissing")}</div>
+     </div>
+     <p class="muted small" style="text-align:center">${i18n.t("thanksText")}</p>
+     <div class="modal-actions">
+       <button class="btn" data-modal="close">${i18n.t("close")}</button>
+     </div>`,
+    (root, close) => {
+      root.querySelector('[data-modal="close"]').addEventListener("click", close);
+      const img = root.querySelector("#support-qr");
+      const ph = root.querySelector("#support-placeholder");
+      if (img && ph) {
+        img.addEventListener("error", () => {
+          img.hidden = true;
+          ph.hidden = false;
+        });
+        img.addEventListener("load", () => {
+          ph.hidden = true;
+        });
+      }
+    }
+  );
 }
 
 function showTimeMachine() {
