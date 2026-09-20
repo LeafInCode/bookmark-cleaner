@@ -16,7 +16,10 @@ const state = {
   selection: { dead: new Set(), duplicates: new Set(), empty: new Set(), moved: new Set(), blocked: new Set() },
   wayback: {},
   updated: new Set(),
+  archivedIds: new Set(),
   portraitYear: "all",
+  portraitMonth: "all",
+  portraitLimit: 50,
   search: "",
   sort: "default",
   limit: 100
@@ -34,7 +37,7 @@ function deadIds() {
   return state.items
     .filter((b) => {
       const r = resultOf(b.id);
-      return r && r.status === STATUS.DEAD;
+      return r && r.status === STATUS.DEAD && !state.archivedIds.has(b.id);
     })
     .map((b) => b.id);
 }
@@ -42,14 +45,14 @@ function deadIds() {
 function movedItems() {
   return state.items.filter((b) => {
     const r = resultOf(b.id);
-    return r && r.status === STATUS.MOVED;
+    return r && r.status === STATUS.MOVED && !state.archivedIds.has(b.id);
   });
 }
 
 function blockedItems() {
   return state.items.filter((b) => {
     const r = resultOf(b.id);
-    return r && UNVERIFIABLE.includes(r.status);
+    return r && UNVERIFIABLE.includes(r.status) && !state.archivedIds.has(b.id);
   });
 }
 
@@ -99,6 +102,7 @@ async function refreshData() {
   state.tree = await bm.getTree();
   state.items = bm.flattenTree(state.tree);
   state.scan = await storage.getScanState();
+  state.archivedIds = await storage.getArchivedIds();
   const bookmarks = state.items.filter((x) => x.type === "bookmark");
   state.duplicates = bm.findDuplicates(bookmarks);
   state.emptyFolders = bm.findEmptyFolders(state.items);
@@ -265,7 +269,8 @@ function noteLabel(note) {
     browser_server_error: "noteBrowserServerError",
     browser_blocked: "noteBrowserBlocked",
     browser_error: "noteBrowserError",
-    browser_unverified: "noteBrowserUnverified"
+    browser_unverified: "noteBrowserUnverified",
+    manual_confirmed: "noteManualConfirmed"
   };
   return note && map[note] ? i18n.t(map[note]) : "";
 }
@@ -290,10 +295,14 @@ function renderItemRow(b, opts) {
   const note = noteLabel(r.note);
   const noteHtml = note ? `<span class="muted small">${note}</span>` : "";
   const panelActions = opts && opts.actions ? opts.actions(b, r) : "";
-  const archiveBtn = (state.activeTab === "dead" || state.activeTab === "blocked")
+  const canReview = state.activeTab === "dead" || state.activeTab === "blocked";
+  const okBtn = canReview
+    ? `<button class="btn small ghost" data-action="mark-ok" data-id="${b.id}">${i18n.t("markOk")}</button>`
+    : "";
+  const archiveBtn = canReview
     ? `<button class="btn small ghost" data-action="archive-one" data-id="${b.id}">${i18n.t("archiveOne")}</button>`
     : "";
-  const actions = `${panelActions}${archiveBtn}
+  const actions = `${panelActions}${okBtn}${archiveBtn}
     <button class="btn small danger" data-action="delete-one" data-id="${b.id}">${i18n.t("deleteOne")}</button>`;
   const path = b.path ? `<span class="muted small">${escapeHtml(b.path)}</span>` : "";
   return `
@@ -508,8 +517,47 @@ function renderPortraitPanel() {
   }).join("");
 
   const chart = svgAreaChart(p.monthly);
+  const locale = i18n.getLang() === "zh" ? "zh-CN" : "en-US";
+  const monthOptions = [["all", i18n.t("portraitMonthAll")]].concat(
+    Array.from({ length: 12 }, (_, i) => {
+      const v = String(i + 1).padStart(2, "0");
+      const label = new Date(2026, i, 1).toLocaleString(locale, { month: "long" });
+      return [v, label];
+    })
+  ).map(([v, label]) => `<option value="${v}" ${state.portraitMonth === v ? "selected" : ""}>${label}</option>`).join("");
+  const monthSelect = yearFilter !== "all"
+    ? `<select id="portrait-month" class="select">${monthOptions}</select>`
+    : "";
+
+  const periodBookmarks = filtered.filter((x) => x.type === "bookmark" && x.url);
+  let listItems = periodBookmarks;
+  if (yearFilter !== "all" && state.portraitMonth !== "all") {
+    listItems = periodBookmarks.filter((b) => {
+      if (!b.dateAdded) return false;
+      return String(new Date(b.dateAdded).getMonth() + 1).padStart(2, "0") === state.portraitMonth;
+    });
+  }
+  listItems = [...listItems].sort((a, b) => (b.dateAdded || 0) - (a.dateAdded || 0));
+  const shownList = listItems.slice(0, state.portraitLimit);
+  const listMore = listItems.length > shownList.length
+    ? `<div class="show-more"><button class="btn" data-action="portrait-more">${i18n.t("showMore")} (${i18n.t("remaining", { n: listItems.length - shownList.length })})</button></div>`
+    : "";
+  const listHtml = shownList.map((b) => `
+    <div class="portrait-item">
+      <div class="item-main">
+        <div class="item-title">${escapeHtml(b.title || b.url)}</div>
+        <div class="item-url">${escapeHtml(b.url)}</div>
+        <div class="item-meta muted small">🕒 ${b.dateAdded ? new Date(b.dateAdded).toLocaleString() : "—"} · ${escapeHtml(b.path || "")}</div>
+      </div>
+      <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(b.url)}">↗</button>
+    </div>`).join("");
+
+  const folderCard = yearFilter === "all"
+    ? `<div class="stat-card grad-purple"><div class="num">${p.totalFolders}</div><div class="label">${i18n.t("folders")}</div></div>`
+    : `<div class="stat-card grad-purple" title="${i18n.t("folderNoTime")}"><div class="num">—</div><div class="label">${i18n.t("folders")}</div></div>`;
+
   return `
-    <div class="year-row">${filterChips}</div>
+    <div class="year-row">${filterChips}${monthSelect}</div>
     <div class="portrait-cols">
       <div class="portrait-col">
         <h4>${i18n.t("portraitTimeGroup")}</h4>
@@ -523,7 +571,7 @@ function renderPortraitPanel() {
       <div class="portrait-col">
         <h4>${i18n.t("portraitStructGroup")}</h4>
         <div class="portrait-grid">
-          <div class="stat-card grad-purple"><div class="num">${p.totalFolders}</div><div class="label">${i18n.t("folders")}</div></div>
+          ${folderCard}
           <div class="stat-card grad-red"><div class="num">${p.deadCount}<span class="unit">(${(p.deadRatio * 100).toFixed(1)}%)</span></div><div class="label">${i18n.t("deadLinks")}</div></div>
           <div class="stat-card grad-amber"><div class="num">${p.duplicateCount}</div><div class="label">${i18n.t("duplicates")}</div></div>
         </div>
@@ -531,10 +579,17 @@ function renderPortraitPanel() {
     </div>
     <div class="card">
       <h3>${i18n.t("portraitMonthly")}</h3>
-      ${chart || `<div class="muted small">${i18n.t("noItems")}</div>`}
+      <div class="chart-wrap" id="chart-wrap">
+        ${chart || `<div class="muted small">${i18n.t("noItems")}</div>`}
+        <div class="chart-tip" hidden></div>
+      </div>
       ${p.mostActive ? `<div class="muted small">${i18n.t("portraitMostActive")}: ${p.mostActive[0]} (${p.mostActive[1]}) · ${i18n.t("portraitOldest")}: ${fmtDate(p.oldest)} · ${i18n.t("portraitNewest")}: ${fmtDate(p.newest)}</div>` : ""}
     </div>
-    <div class="card"><h3>${i18n.t("portraitTopDomains")}</h3>${domains || `<div class="muted small">${i18n.t("noItems")}</div>`}</div>`;
+    <div class="card"><h3>${i18n.t("portraitTopDomains")}</h3>${domains || `<div class="muted small">${i18n.t("noItems")}</div>`}</div>
+    <div class="card">
+      <h3>${i18n.t("portraitList")} (${listItems.length})</h3>
+      ${listHtml ? `<div class="portrait-list">${listHtml}</div>${listMore}` : `<div class="muted small">${i18n.t("portraitListEmpty")}</div>`}
+    </div>`;
 }
 
 function svgAreaChart(points) {
@@ -566,6 +621,11 @@ function svgAreaChart(points) {
   const dots = coords.map(([x, y], i) =>
     `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="chart-dot"><title>${escapeHtml(points[i][0])}: ${points[i][1]}</title></circle>`
   ).join("");
+  const hits = coords.map(([x], i) => {
+    const w = Math.max(step, 8);
+    return `<rect class="chart-hit" x="${(x - w / 2).toFixed(1)}" y="${padT}" width="${w.toFixed(1)}" height="${innerH}" fill="transparent"
+      data-label="${escapeHtml(points[i][0])}" data-value="${points[i][1]}"/>`;
+  }).join("");
   return `<svg viewBox="0 0 ${w} ${h}" class="chart" preserveAspectRatio="xMidYMid meet" role="img">
     <defs>
       <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
@@ -577,6 +637,7 @@ function svgAreaChart(points) {
     <path d="${area}" fill="url(#areaFill)"/>
     <path d="${line}" fill="none" class="chart-line"/>
     ${dots}
+    ${hits}
     ${labels}
   </svg>`;
 }
@@ -596,6 +657,29 @@ function renderPanel() {
     case "portrait": panel.innerHTML = renderPortraitPanel(); break;
     default: panel.innerHTML = "";
   }
+  if (state.activeTab === "portrait") bindChartHover();
+}
+
+function bindChartHover() {
+  const wrap = $("#chart-wrap");
+  if (!wrap) return;
+  const tip = wrap.querySelector(".chart-tip");
+  if (!tip) return;
+  wrap.addEventListener("mousemove", (e) => {
+    const hit = e.target.closest(".chart-hit");
+    if (!hit) {
+      tip.hidden = true;
+      return;
+    }
+    tip.hidden = false;
+    tip.textContent = `${hit.getAttribute("data-label")}: ${hit.getAttribute("data-value")}`;
+    const rect = wrap.getBoundingClientRect();
+    tip.style.left = `${e.clientX - rect.left}px`;
+    tip.style.top = `${e.clientY - rect.top - 30}px`;
+  });
+  wrap.addEventListener("mouseleave", () => {
+    tip.hidden = true;
+  });
 }
 
 function renderAll() {
@@ -794,6 +878,13 @@ function bindEvents() {
   });
 
   $("#panel").addEventListener("change", (e) => {
+    const monthSel = e.target.closest("#portrait-month");
+    if (monthSel) {
+      state.portraitMonth = monthSel.value;
+      state.portraitLimit = 50;
+      renderPanel();
+      return;
+    }
     const cb = e.target.closest("[data-check]");
     if (cb) {
       const id = cb.getAttribute("data-check");
@@ -819,6 +910,8 @@ function bindEvents() {
     const yearBtn = e.target.closest("[data-year]");
     if (yearBtn) {
       state.portraitYear = yearBtn.getAttribute("data-year");
+      state.portraitMonth = "all";
+      state.portraitLimit = 50;
       renderPanel();
       return;
     }
@@ -839,6 +932,11 @@ function bindEvents() {
       renderPanel();
       return;
     }
+    if (action === "portrait-more") {
+      state.portraitLimit += 50;
+      renderPanel();
+      return;
+    }
     if (action === "clear-selection") {
       state.selection[state.activeTab].clear();
       renderAll();
@@ -853,6 +951,17 @@ function bindEvents() {
       toast(i18n.t("deleteDone", { n: trashEntries.length }));
       return;
     }
+    if (action === "mark-ok") {
+      const st = await storage.getScanState();
+      if (st && st.results && st.results[id]) {
+        st.results[id] = { ...st.results[id], status: STATUS.OK, note: "manual_confirmed", checkedAt: Date.now() };
+        await storage.setScanState(st);
+        state.scan = st;
+      }
+      renderAll();
+      toast(i18n.t("updated"));
+      return;
+    }
     if (action === "archive-one" || action === "archive-selected") {
       const ids = action === "archive-one" ? [id] : [...state.selection[state.activeTab]];
       if (!ids.length) return;
@@ -860,10 +969,11 @@ function bindEvents() {
       const existing = state.items.find((x) => x.type === "folder" && x.title === name && x.parentId === "1");
       const folderId = existing ? existing.id : (await bm.createFolder("1", name)).id;
       const moved = await bm.moveBookmarks(ids, folderId);
+      await storage.addArchivedIds(ids);
       state.selection[state.activeTab].clear();
       await refreshData();
       renderAll();
-      toast(i18n.t("moveDone", { n: moved }));
+      toast(`${i18n.t("moveDone", { n: moved })} · ${i18n.t("archivedHint")}`);
       return;
     }
     if (action === "delete-selected") return deleteSelected();
