@@ -982,12 +982,13 @@ async function doExport(source, format, opts) {
   }
   if (format === "json") {
     exportTree(tree, `bookmarks-export-${s}.json`);
+    toast(i18n.t("exportDone"));
   } else if (format === "html") {
-    exportSharePage(items, i18n.t("exportTitle"), s);
+    showShareTitleModal(items);
   } else {
     exportReportCsv(items, state.scan ? state.scan.results : {}, s);
+    toast(i18n.t("exportDone"));
   }
-  toast(i18n.t("exportDone"));
 }
 
 function showImportModal(file) {
@@ -1046,6 +1047,25 @@ async function logOp(entry) {
   }
 }
 
+function dayKey(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startOfToday) return i18n.t("today");
+  if (ts >= startOfToday - 86400000) return i18n.t("yesterday");
+  return d.toLocaleDateString();
+}
+
+function groupByDay(entries, getTs) {
+  const map = new Map();
+  for (const e of entries) {
+    const key = dayKey(getTs(e));
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(e);
+  }
+  return map;
+}
+
 function showHistory() {
   storage.getOpLog().then((log) => {
     const typeLabel = {
@@ -1056,23 +1076,30 @@ function showHistory() {
       delete: "opDelete",
       title: "opTitle"
     };
-    const rows = log.length
-      ? log.map((e, i) => {
-          const titles = (e.titles || []).slice(0, 3).join("、");
-          const more = (e.titles || []).length > 3 ? ` 等 ${e.titles.length} 项` : "";
-          const undoable = e.type !== "delete";
-          return `
-            <div class="trash-item">
-              <div class="item-main">
-                <div class="item-title"><span class="tag">${i18n.t(typeLabel[e.type] || e.type)}</span> ${escapeHtml(titles)}${more}</div>
-                <div class="item-url">${new Date(e.at).toLocaleString()}${e.type === "delete" ? ` · ${i18n.t("deletedHint")}` : ""}</div>
-              </div>
-              ${undoable ? `<button class="btn small" data-undo="${i}">${i18n.t("undo")}</button>` : ""}
-            </div>`;
-        }).join("")
-      : `<div class="muted small">${i18n.t("historyEmpty")}</div>`;
+    let body = `<div class="muted small">${i18n.t("historyEmpty")}</div>`;
+    if (log.length) {
+      const indexed = log.map((e, i) => ({ ...e, _i: i }));
+      const byDay = groupByDay(indexed, (e) => e.at);
+      body = [...byDay.entries()].map(([day, entries]) => `
+        <div class="day-group">
+          <div class="day-head">${escapeHtml(day)} <span class="count">${entries.length}</span></div>
+          ${entries.map((e) => {
+            const titles = (e.titles || []).slice(0, 3).join("、");
+            const more = (e.titles || []).length > 3 ? ` 等 ${e.titles.length} 项` : "";
+            const undoable = e.type !== "delete";
+            return `
+              <div class="trash-item">
+                <div class="item-main">
+                  <div class="item-title"><span class="op-tag op-${e.type}">${i18n.t(typeLabel[e.type] || e.type)}</span>${escapeHtml(titles)}${more}</div>
+                  <div class="item-url">${new Date(e.at).toLocaleTimeString()}${e.type === "delete" ? ` · ${i18n.t("deletedHint")}` : ""}</div>
+                </div>
+                ${undoable ? `<button class="btn small" data-undo="${e._i}">${i18n.t("undo")}</button>` : ""}
+              </div>`;
+          }).join("")}
+        </div>`).join("");
+    }
     openModal(
-      `<h3>${i18n.t("history")}</h3>${rows}
+      `<h3>${i18n.t("history")}</h3>${body}
        <div class="modal-actions">
          <button class="btn" data-modal="close">${i18n.t("close")}</button>
        </div>`,
@@ -1329,18 +1356,28 @@ function showCleanTitlesModal() {
 
 async function showTrash() {
   const trash = await storage.getTrash();
-  const rows = trash.length
-    ? trash.map((t, i) => `
-        <div class="trash-item">
-          <div class="item-main">
-            <div class="item-title">${t.isFolder ? "📁 " : ""}${escapeHtml(t.title || t.url || "")}</div>
-            <div class="item-url">${escapeHtml(t.url || "")}</div>
-          </div>
-          <button class="btn small" data-restore="${i}">${i18n.t("restore")}</button>
-        </div>`).join("")
-    : `<div class="muted small">${i18n.t("emptyTrash")}</div>`;
+  let body = `<div class="muted small">${i18n.t("emptyTrash")}</div>`;
+  if (trash.length) {
+    const indexed = trash.map((t, i) => ({ ...t, _i: i }));
+    const byDay = groupByDay(indexed, (t) => t.deletedAt || Date.now());
+    body = [...byDay.entries()].map(([day, entries]) => `
+      <div class="day-group">
+        <div class="day-head">${escapeHtml(day)} <span class="count">${entries.length}</span></div>
+        ${entries.map((t) => `
+          <div class="trash-item">
+            <div class="item-main">
+              <div class="item-title">
+                <span class="op-tag ${t.isFolder ? "op-folder" : "op-bookmark"}">${i18n.t(t.isFolder ? "opTagFolder" : "opTagBookmark")}</span>
+                ${escapeHtml(t.title || t.url || "")}
+              </div>
+              <div class="item-url">${new Date(t.deletedAt || Date.now()).toLocaleTimeString()} · ${escapeHtml(t.url || t.parentId || "")}</div>
+            </div>
+            <button class="btn small" data-restore="${t._i}">${i18n.t("restore")}</button>
+          </div>`).join("")}
+      </div>`).join("");
+  }
   openModal(
-    `<h3>${i18n.t("trash")}</h3><p class="muted small">${i18n.t("trashHint")}</p>${rows}
+    `<h3>${i18n.t("trash")}</h3><p class="muted small">${i18n.t("trashHint")}</p>${body}
      <div class="modal-actions">
        <button class="btn danger" data-modal="clear">${i18n.t("clearTrash")}</button>
        <button class="btn" data-modal="close">${i18n.t("close")}</button>
@@ -1349,6 +1386,8 @@ async function showTrash() {
       root.querySelector('[data-modal="close"]').addEventListener("click", close);
       root.querySelector('[data-modal="clear"]').addEventListener("click", async () => {
         await storage.clearTrash();
+        await refreshData();
+        renderAll();
         close();
       });
       root.querySelectorAll("[data-restore]").forEach((btn) => {
@@ -1369,6 +1408,43 @@ async function showTrash() {
   );
 }
 
+function showShareTitleModal(items) {
+  const domains = new Set();
+  for (const b of items) {
+    try {
+      domains.add(new URL(b.url).hostname.replace(/^www\./, ""));
+    } catch {
+      /* skip */
+    }
+  }
+  const defaultTitle = domains.size === 1
+    ? i18n.t("shareTitleDomain", { domain: [...domains][0] })
+    : i18n.t("shareTitleDefault");
+  openModal(
+    `<h3>${i18n.t("exportShare")}</h3>
+     <div class="form-row">
+       <label>${i18n.t("shareTitleLabel")}</label>
+       <input id="share-title" class="select" value="${escapeHtml(defaultTitle)}">
+     </div>
+     <div class="modal-actions">
+       <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
+       <button class="btn primary" data-modal="ok">${i18n.t("confirm")}</button>
+     </div>`,
+    (root, close) => {
+      const input = root.querySelector("#share-title");
+      input.focus();
+      input.select();
+      root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
+      root.querySelector('[data-modal="ok"]').addEventListener("click", () => {
+        const title = (input.value || "").trim() || defaultTitle;
+        close();
+        exportSharePage(items, title, stamp());
+        toast(i18n.t("exportDone"));
+      });
+    }
+  );
+}
+
 async function exportShare() {
   const tab = state.activeTab;
   const sel = [...state.selection[tab]];
@@ -1377,8 +1453,7 @@ async function exportShare() {
     toast(i18n.t("selectAll") + " → " + i18n.t("exportShare"));
     return;
   }
-  exportSharePage(items, i18n.t("exportShare"), stamp());
-  toast(i18n.t("exportDone"));
+  showShareTitleModal(items);
 }
 
 function bindEvents() {
