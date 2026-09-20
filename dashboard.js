@@ -28,7 +28,8 @@ const state = {
   sort: "default",
   limit: 100,
   trashCount: 0,
-  settings: null
+  settings: null,
+  windowId: undefined
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -1298,10 +1299,30 @@ function showTimeMachine() {
      </div>
      <div id="tm-body">${bodyHtml()}</div>
      <div class="modal-actions">
+       <button class="btn" id="tm-side">${i18n.t("openSidePanel")}</button>
+       <button class="btn" id="tm-window">${i18n.t("openWindow")}</button>
        <button class="btn" data-modal="close">${i18n.t("close")}</button>
      </div>`,
     (root, close) => {
       root.querySelector('[data-modal="close"]').addEventListener("click", close);
+      root.querySelector("#tm-window").addEventListener("click", () => {
+        chrome.windows.create({
+          url: chrome.runtime.getURL("timemachine.html"),
+          type: "popup",
+          width: 440,
+          height: 680
+        });
+        close();
+      });
+      root.querySelector("#tm-side").addEventListener("click", () => {
+        const winId = state.windowId;
+        const call = winId !== undefined
+          ? chrome.sidePanel.open({ windowId: winId })
+          : chrome.windows.getCurrent().then((w) => chrome.sidePanel.open({ windowId: w.id }));
+        Promise.resolve(call)
+          .then(() => close())
+          .catch((err) => toast(String((err && err.message) || err)));
+      });
       root.addEventListener("click", (e) => {
         const tab = e.target.closest("[data-tm]");
         if (tab) {
@@ -1848,6 +1869,12 @@ function bindEvents() {
 
 async function init() {
   await i18n.initLang();
+  try {
+    const w = await chrome.windows.getCurrent();
+    state.windowId = w.id;
+  } catch {
+    /* side panel fallback uses getCurrent */
+  }
   $("#lang-select").value = i18n.getLang();
   applyI18n();
   await refreshData();
