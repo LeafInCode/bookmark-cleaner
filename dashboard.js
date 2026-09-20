@@ -1248,7 +1248,7 @@ function showCleanTitlesModal() {
   const ids = [...state.selection[state.activeTab]];
   const items = state.items.filter((b) => ids.includes(b.id) && b.url);
   if (!items.length) return;
-  const defaultRule = "\\s*[-|_—–]\\s*[^-|_—–]{1,24}$";
+  const defaultRule = "\\s*[-|_—–]\\s*[^-|_—–/:：]{1,20}$";
   openModal(
     `<h3>${i18n.t("cleanTitles")}</h3>
      <div class="form-row"><label>${i18n.t("titleRule")}</label>
