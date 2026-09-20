@@ -188,14 +188,22 @@ function renderExcludedHint() {
 }
 
 function showSettings() {
-  const excluded = (state.settings && state.settings.excludedFolders) || [];
+  const s = state.settings || {};
+  const excluded = s.excludedFolders || [];
   openModal(
     `<h3>${i18n.t("settingsTitle")}</h3>
      <div class="form-row" style="align-items:flex-start">
        <label>${i18n.t("excludedFoldersLabel")}</label>
        <input id="excluded-input" class="select" value="${escapeHtml(excluded.join(", "))}">
      </div>
-     <div class="muted small" style="margin:-4px 0 8px 100px">${i18n.t("excludedFoldersHint")}</div>
+     <div class="muted small" style="margin:-4px 0 12px 100px">${i18n.t("excludedFoldersHint")}</div>
+     <label class="small" style="display:block;margin:10px 0">
+       <input type="checkbox" id="set-weekly-scan" ${s.weeklyScan ? "checked" : ""}> ${i18n.t("weeklyScanLabel")}
+     </label>
+     <label class="small" style="display:block;margin:10px 0">
+       <input type="checkbox" id="set-auto-backup" ${s.autoBackup ? "checked" : ""}> ${i18n.t("autoBackupLabel")}
+     </label>
+     <div class="muted small" style="margin-left:22px">${i18n.t("autoBackupHint")}</div>
      <div class="modal-actions">
        <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
        <button class="btn primary" data-modal="ok">${i18n.t("save")}</button>
@@ -206,14 +214,29 @@ function showSettings() {
         const raw = root.querySelector("#excluded-input").value || "";
         const list = raw
           .split(/[,，、]/)
-          .map((s) => s.trim())
+          .map((x) => x.trim())
           .filter(Boolean);
-        state.settings = await storage.setSettings({ excludedFolders: list });
+        const weeklyScan = root.querySelector("#set-weekly-scan").checked;
+        let autoBackup = root.querySelector("#set-auto-backup").checked;
+        if (autoBackup) {
+          try {
+            const granted = await chrome.permissions.request({ permissions: ["downloads"] });
+            if (!granted) {
+              autoBackup = false;
+              toast(i18n.t("permissionDenied"));
+            }
+          } catch {
+            autoBackup = false;
+          }
+        }
+        state.settings = await storage.setSettings({ excludedFolders: list, weeklyScan, autoBackup });
         close();
         renderExcludedHint();
         toast(i18n.t("saved"));
       });
     }
+  );
+}
   );
 }
 

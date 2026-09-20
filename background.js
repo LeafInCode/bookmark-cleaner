@@ -1,6 +1,7 @@
 import { getTree, flattenTree, httpBookmarks } from "./lib/bookmarks.js";
 import { checkUrl, checkWayback, looksLikeAuth, STATUS } from "./lib/linkcheck.js";
-import { getScanState, patchScanState, getSettings, getArchivedIds } from "./lib/storage.js";
+import { getScanState, patchScanState, getSettings, setSettings, getArchivedIds } from "./lib/storage.js";
+import { hasScanPermissions } from "./lib/permissions.js";
 import { hostOf, sameSite } from "./lib/url.js";
 
 let scanning = false;
@@ -85,8 +86,58 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-chrome.runtime.onStartup.addListener(updateBadge);
-chrome.runtime.onInstalled.addListener(updateBadge);
+chrome.runtime.onStartup.addListener(() => {
+  setupAlarms();
+  maybeRunWeeklyTasks();
+  updateBadge();
+});
+chrome.runtime.onInstalled.addListener(() => {
+  setupAlarms();
+  updateBadge();
+});
+
+const WEEK_MIN = 60 * 24 * 7;
+
+function setupAlarms() {
+  chrome.alarms.create("weekly-scan", { periodInMinutes: WEEK_MIN });
+  chrome.alarms.create("auto-backup", { periodInMinutes: WEEK_MIN });
+}
+
+async function maybeRunWeeklyTasks() {
+  const settings = await getSettings();
+  const now = Date.now();
+  if (settings.weeklyScan && (!settings.lastScanAt || now - settings.lastScanAt > WEEK_MIN * 60000)) {
+    const has = await hasScanPermissions();
+    if (has && !scanning) {
+      startScan("incremental");
+    }
+  }
+  if (settings.autoBackup && (!settings.lastAutoBackup || now - settings.lastAutoBackup > WEEK_MIN * 60000)) {
+    runAutoBackup();
+  }
+}
+
+async function runAutoBackup() {
+  try {
+    const settings = await getSettings();
+    if (!settings.autoBackup) return;
+    const has = await chrome.permissions.contains({ permissions: ["downloads"] });
+    if (!has) return;
+    const tree = await getTree();
+    const json = JSON.stringify(tree, null, 2);
+    if (json.length > 25 * 1024 * 1024) return;
+    const stampStr = new Date().toISOString().slice(0, 10);
+    const url = `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
+    await chrome.downloads.download({
+      url,
+      filename: `bookmark-backups/bookmarks-auto-${stampStr}.json`,
+      saveAs: false
+    });
+    await setSettings({ lastAutoBackup: Date.now() });
+  } catch {
+    /* best-effort */
+  }
+}
 
 async function startScan(mode) {
   if (scanning) return;
@@ -171,6 +222,7 @@ async function startScan(mode) {
       total,
       results
     });
+    await setSettings({ lastScanAt: Date.now() });
     await updateBadge();
   } catch (e) {
     await patchScanState({
@@ -185,6 +237,10 @@ async function startScan(mode) {
 }
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === "weekly-scan" || alarm.name === "auto-backup") {
+    await maybeRunWeeklyTasks();
+    return;
+  }
   if (alarm.name !== "scan-keepalive") return;
   const state = await getScanState();
   if (state && state.status === "scanning" && !scanning) {
