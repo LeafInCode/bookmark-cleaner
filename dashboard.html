@@ -17,13 +17,13 @@
       <span data-i18n="appName">书签清理助手</span>
     </div>
     <div class="top-actions">
-      <button id="btn-backup" class="btn ghost" data-i18n="exportBackup">导出备份</button>
-      <button id="btn-import" class="btn ghost" data-i18n="importBackup">导入备份</button>
+      <button id="btn-backup" class="btn ghost tone-blue" data-i18n="exportBackup" data-i18n-title="tipExportBackup">导出备份</button>
+      <button id="btn-import" class="btn ghost tone-green" data-i18n="importBackup" data-i18n-title="tipImportBackup">导入备份</button>
       <input id="import-file" type="file" accept=".json,application/json" hidden>
-      <button id="btn-report" class="btn ghost" data-i18n="exportReport">导出报告</button>
-      <button id="btn-share" class="btn ghost" data-i18n="exportShare">导出分享页</button>
-      <button id="btn-trash" class="btn ghost" data-i18n="trash">回收站</button>
-      <select id="lang-select" class="select">
+      <button id="btn-report" class="btn ghost" data-i18n="exportReport" data-i18n-title="tipExportReport">导出报告</button>
+      <button id="btn-share" class="btn ghost tone-purple" data-i18n="exportShare" data-i18n-title="tipExportShare">导出分享页</button>
+      <button id="btn-trash" class="btn ghost tone-gray" data-i18n-title="tipTrash"><span data-i18n="trash">回收站</span><span id="trash-badge" class="badge-count" hidden></span></button>
+      <select id="lang-select" class="select" data-i18n-title="tipLang">
         <option value="zh">中文</option>
         <option value="en">English</option>
       </select>
@@ -43,6 +43,7 @@
     <nav class="tabs" id="tabs"></nav>
     <div id="list-controls" class="list-controls">
       <input id="search-input" class="select search" type="search">
+      <select id="date-select" class="select"></select>
       <select id="sort-select" class="select"></select>
     </div>
     <section id="panel" class="panel"></section>

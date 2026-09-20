@@ -3,7 +3,7 @@ import * as storage from "./lib/storage.js";
 import * as bm from "./lib/bookmarks.js";
 import * as permissions from "./lib/permissions.js";
 import { buildPortrait, buildTimeSeries } from "./lib/stats.js";
-import { exportBackup, exportReportCsv, exportSharePage, stamp } from "./lib/export.js";
+import { exportBackup, exportReportCsv, exportSharePage, exportTree, stamp } from "./lib/export.js";
 import { STATUS } from "./lib/linkcheck.js";
 
 const state = {
@@ -21,8 +21,10 @@ const state = {
   portraitMonth: "all",
   portraitLimit: 50,
   search: "",
+  dateRange: "all",
   sort: "default",
-  limit: 100
+  limit: 100,
+  trashCount: 0
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -95,7 +97,18 @@ function applyI18n() {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     el.textContent = i18n.t(el.getAttribute("data-i18n"));
   });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    el.title = i18n.t(el.getAttribute("data-i18n-title"));
+  });
   document.documentElement.lang = i18n.getLang() === "zh" ? "zh-CN" : "en";
+}
+
+function renderTopbar() {
+  const badge = $("#trash-badge");
+  if (!badge) return;
+  const n = state.trashCount || 0;
+  badge.hidden = n === 0;
+  badge.textContent = n > 999 ? "999+" : String(n);
 }
 
 async function refreshData() {
@@ -103,6 +116,8 @@ async function refreshData() {
   state.items = bm.flattenTree(state.tree);
   state.scan = await storage.getScanState();
   state.archivedIds = await storage.getArchivedIds();
+  const trash = await storage.getTrash();
+  state.trashCount = trash.length;
   const bookmarks = state.items.filter((x) => x.type === "bookmark");
   state.duplicates = bm.findDuplicates(bookmarks);
   state.emptyFolders = bm.findEmptyFolders(state.items);
@@ -189,11 +204,25 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;");
 }
 
+function inDateRange(b) {
+  const range = state.dateRange || "all";
+  if (range === "all") return true;
+  if (!b.dateAdded) return false;
+  const days = (Date.now() - b.dateAdded) / 86400000;
+  if (range === "1y") return days <= 365;
+  if (range === "3y") return days <= 365 * 3;
+  if (range === "older") return days > 365 * 3;
+  return true;
+}
+
 function visibleItems(items) {
   const q = (state.search || "").trim().toLowerCase();
   let out = items;
   if (q) {
     out = out.filter((b) => [b.title, b.url, b.path].some((x) => (x || "").toLowerCase().includes(q)));
+  }
+  if (state.dateRange && state.dateRange !== "all") {
+    out = out.filter((b) => (b.type === "folder" ? true : inDateRange(b)));
   }
   const s = state.sort || "default";
   if (s === "title") out = [...out].sort((a, b) => String(a.title || "").localeCompare(String(b.title || "")));
@@ -227,6 +256,15 @@ function renderListControls() {
     ["oldest", "sortOldest"],
     ["path", "sortPath"]
   ].map(([v, k]) => `<option value="${v}" ${state.sort === v ? "selected" : ""}>${i18n.t(k)}</option>`).join("");
+  const dateSel = $("#date-select");
+  if (dateSel) {
+    dateSel.innerHTML = [
+      ["all", "dateRangeAll"],
+      ["1y", "dateRange1y"],
+      ["3y", "dateRange3y"],
+      ["older", "dateRangeOlder"]
+    ].map(([v, k]) => `<option value="${v}" ${state.dateRange === v ? "selected" : ""}>${i18n.t(k)}</option>`).join("");
+  }
 }
 
 function renderToolbar(extraButtons) {
@@ -694,6 +732,7 @@ function bindChartHover() {
 function renderAll() {
   renderTabs();
   renderScanStatus();
+  renderTopbar();
   renderListControls();
   renderPanel();
   renderSelectionBar();
@@ -812,6 +851,156 @@ async function moveSelected() {
   );
 }
 
+function folderOptionsHtml() {
+  const folders = state.items.filter((x) => x.type === "folder" && x.id !== "0");
+  return folders
+    .map((f) => {
+      const depth = (f.path || "").split(" / ").length;
+      return `<option value="${f.id}">${"— ".repeat(Math.max(0, depth - 1))}${escapeHtml(f.title || "(untitled)")}</option>`;
+    })
+    .join("");
+}
+
+function showExportModal() {
+  openModal(
+    `<h3>${i18n.t("exportTitle")}</h3>
+     <div class="form-row">
+       <label>${i18n.t("exportSource")}</label>
+       <select id="export-source" class="select">
+         <option value="all">${i18n.t("sourceAll")}</option>
+         <option value="folder">${i18n.t("sourceFolder")}</option>
+         <option value="range">${i18n.t("sourceRange")}</option>
+       </select>
+     </div>
+     <div class="form-row" id="export-folder-row" hidden>
+       <label>${i18n.t("sourceFolder")}</label>
+       <select id="export-folder" class="select">${folderOptionsHtml()}</select>
+     </div>
+     <div class="form-row" id="export-range-row" hidden>
+       <label>${i18n.t("sourceRange")}</label>
+       <span class="range-inputs">
+         <input type="date" id="export-from" class="select">
+         <span class="muted">~</span>
+         <input type="date" id="export-to" class="select">
+       </span>
+     </div>
+     <div class="form-row">
+       <label>${i18n.t("exportFormat")}</label>
+       <select id="export-format" class="select">
+         <option value="json">${i18n.t("fmtJson")}</option>
+         <option value="html">${i18n.t("fmtHtml")}</option>
+         <option value="csv">${i18n.t("fmtCsv")}</option>
+       </select>
+     </div>
+     <div class="modal-actions">
+       <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
+       <button class="btn primary" data-modal="ok">${i18n.t("confirm")}</button>
+     </div>`,
+    (root, close) => {
+      const sourceSel = root.querySelector("#export-source");
+      sourceSel.addEventListener("change", () => {
+        root.querySelector("#export-folder-row").hidden = sourceSel.value !== "folder";
+        root.querySelector("#export-range-row").hidden = sourceSel.value !== "range";
+      });
+      root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
+      root.querySelector('[data-modal="ok"]').addEventListener("click", async () => {
+        const source = sourceSel.value;
+        const format = root.querySelector("#export-format").value;
+        const opts = {
+          folderId: root.querySelector("#export-folder").value,
+          from: root.querySelector("#export-from").value,
+          to: root.querySelector("#export-to").value
+        };
+        close();
+        await doExport(source, format, opts);
+      });
+    }
+  );
+}
+
+async function doExport(source, format, opts) {
+  const s = stamp();
+  let items = [];
+  let tree = null;
+  if (source === "all") {
+    tree = state.tree;
+    items = state.items.filter((x) => x.type === "bookmark" && x.url);
+  } else if (source === "folder") {
+    if (!opts.folderId) return;
+    const sub = await bm.getSubTree(opts.folderId);
+    tree = sub ? [sub] : null;
+    items = bm.flattenTree(sub ? [sub] : []).filter((x) => x.type === "bookmark" && x.url);
+  } else if (source === "range") {
+    const from = opts.from ? new Date(`${opts.from}T00:00:00`).getTime() : 0;
+    const to = opts.to ? new Date(`${opts.to}T23:59:59`).getTime() : Number.MAX_SAFE_INTEGER;
+    items = state.items.filter((x) => x.type === "bookmark" && x.url && x.dateAdded >= from && x.dateAdded <= to);
+    tree = [{
+      title: `${i18n.t("exportTitle")} ${opts.from || ""} ~ ${opts.to || ""}`.trim(),
+      children: items.map((b) => ({ title: b.title, url: b.url }))
+    }];
+  }
+  if (!items.length) {
+    toast(i18n.t("exportEmpty"));
+    return;
+  }
+  if (format === "json") {
+    exportTree(tree, `bookmarks-export-${s}.json`);
+  } else if (format === "html") {
+    exportSharePage(items, i18n.t("exportTitle"), s);
+  } else {
+    exportReportCsv(items, state.scan ? state.scan.results : {}, s);
+  }
+  toast(i18n.t("exportDone"));
+}
+
+function showImportModal(file) {
+  openModal(
+    `<h3>${i18n.t("importTitle")}</h3>
+     <div class="form-row">
+       <label>${i18n.t("importTarget")}</label>
+       <select id="import-target" class="select">
+         <option value="__new__">${i18n.t("importNewFolder")}</option>
+         ${folderOptionsHtml()}
+       </select>
+     </div>
+     <label class="small"><input type="checkbox" id="import-dedupe" checked> ${i18n.t("importDedupe")}</label>
+     <div class="modal-actions">
+       <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
+       <button class="btn primary" data-modal="ok">${i18n.t("confirm")}</button>
+     </div>`,
+    (root, close) => {
+      root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
+      root.querySelector('[data-modal="ok"]').addEventListener("click", async () => {
+        const target = root.querySelector("#import-target").value;
+        const dedupe = root.querySelector("#import-dedupe").checked;
+        close();
+        await doImport(file, target, dedupe);
+      });
+    }
+  );
+}
+
+async function doImport(file, target, dedupe) {
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const roots = Array.isArray(data) ? data : [data];
+    const children = roots.flatMap((r) => r.children || []);
+    let parentId = target;
+    if (target === "__new__") {
+      const folder = await bm.createFolder("1", `${i18n.t("importFolder")} ${new Date().toLocaleString()}`);
+      parentId = folder.id;
+    }
+    const existing = dedupe ? await bm.collectExistingUrlKeys() : new Set();
+    const res = await bm.importTree(children, parentId, existing);
+    await refreshData();
+    renderAll();
+    toast(i18n.t("importDone", res));
+  } catch (err) {
+    toast(String(err && err.message ? err.message : err));
+  }
+}
+
 async function showTrash() {
   const trash = await storage.getTrash();
   const rows = trash.length
@@ -883,6 +1072,12 @@ function bindEvents() {
 
   $("#sort-select").addEventListener("change", (e) => {
     state.sort = e.target.value;
+    renderPanel();
+  });
+
+  $("#date-select").addEventListener("change", (e) => {
+    state.dateRange = e.target.value;
+    state.limit = 100;
     renderPanel();
   });
 
@@ -1092,28 +1287,10 @@ function bindEvents() {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      const roots = Array.isArray(data) ? data : [data];
-      const children = roots.flatMap((r) => r.children || []);
-      const ok = await confirmModal(`${i18n.t("importBackup")} → ${i18n.t("importFolder")}`);
-      if (!ok) return;
-      const folder = await bm.createFolder("1", `${i18n.t("importFolder")} ${new Date().toLocaleString()}`);
-      const existing = await bm.collectExistingUrlKeys();
-      const res = await bm.importTree(children, folder.id, existing);
-      await refreshData();
-      renderAll();
-      toast(i18n.t("importDone", res));
-    } catch (err) {
-      toast(String(err && err.message ? err.message : err));
-    }
+    showImportModal(file);
   });
 
-  $("#btn-backup").addEventListener("click", () => {
-    exportBackup(state.tree, stamp());
-    toast(i18n.t("exportDone"));
-  });
+  $("#btn-backup").addEventListener("click", () => showExportModal());
   $("#btn-report").addEventListener("click", () => {
     exportReportCsv(state.items, state.scan ? state.scan.results : {}, stamp());
     toast(i18n.t("exportDone"));

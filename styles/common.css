@@ -53,6 +53,28 @@ body {
 .btn.small { padding: 4px 10px; font-size: 12px; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
+.btn.tone-blue { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.btn.tone-blue:hover { background: #dbeafe; border-color: #93c5fd; }
+.btn.tone-green { background: #ecfdf5; border-color: #a7f3d0; color: #047857; }
+.btn.tone-green:hover { background: #d1fae5; border-color: #6ee7b7; }
+.btn.tone-purple { background: #f5f3ff; border-color: #ddd6fe; color: #6d28d9; }
+.btn.tone-purple:hover { background: #ede9fe; border-color: #c4b5fd; }
+.btn.tone-gray { background: #f8fafc; border-color: #e2e8f0; color: #475569; }
+.btn.tone-gray:hover { background: #f1f5f9; border-color: #cbd5e1; }
+
+.badge-count {
+  display: inline-block;
+  min-width: 18px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  margin-left: 6px;
+}
+
 .select {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -133,3 +155,19 @@ body {
   gap: 8px;
   margin-top: 18px;
 }
+
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+.form-row > label {
+  width: 90px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.form-row .select { flex: 1; }
+.range-inputs { display: flex; align-items: center; gap: 8px; flex: 1; }
+.range-inputs input { flex: 1; min-width: 0; }
