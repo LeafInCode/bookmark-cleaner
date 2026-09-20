@@ -141,8 +141,10 @@ function renderScanStatus() {
     label.textContent = i18n.t("idle");
     btn.textContent = i18n.t("scan");
     $("#summary").textContent = "";
+    $("#btn-rescan-full").hidden = true;
     return;
   }
+  $("#btn-rescan-full").hidden = s.status === "scanning";
   if (s.status === "scanning") {
     const pct = s.total ? Math.round((s.processed / s.total) * 100) : 0;
     bar.style.width = `${pct}%`;
@@ -167,7 +169,9 @@ function renderScanStatus() {
         empty: state.emptyFolders.length,
         moved,
         blocked
-      }) + (s.skipped ? ` · ${i18n.t("scanSkipped", { n: s.skipped })}` : "");
+      })
+        + (s.reused ? ` · ${i18n.t("scanReused", { n: s.reused })}` : "")
+        + (s.skipped ? ` · ${i18n.t("scanSkipped", { n: s.skipped })}` : "");
     }
   }
 }
@@ -1733,7 +1737,22 @@ function bindEvents() {
       toast(i18n.t("permissionDenied"));
       return;
     }
-    await chrome.runtime.sendMessage({ type: "scan:start" });
+    await chrome.runtime.sendMessage({ type: "scan:start", mode: "incremental" });
+    setTimeout(async () => {
+      state.scan = await storage.getScanState();
+      renderScanStatus();
+    }, 300);
+  });
+
+  $("#btn-rescan-full").addEventListener("click", async () => {
+    const ok = await confirmModal(i18n.t("tipRescanFull"));
+    if (!ok) return;
+    const granted = await permissions.ensureScanPermissions();
+    if (!granted) {
+      toast(i18n.t("permissionDenied"));
+      return;
+    }
+    await chrome.runtime.sendMessage({ type: "scan:start", mode: "full" });
     setTimeout(async () => {
       state.scan = await storage.getScanState();
       renderScanStatus();

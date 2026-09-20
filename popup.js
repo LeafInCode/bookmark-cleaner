@@ -40,7 +40,7 @@ $("#btn-scan").addEventListener("click", async () => {
     $("#btn-scan").textContent = i18n.t("permissionDenied");
     return;
   }
-  await chrome.runtime.sendMessage({ type: "scan:start" });
+  await chrome.runtime.sendMessage({ type: "scan:start", mode: "incremental" });
   await render();
 });
 

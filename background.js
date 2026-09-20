@@ -1,6 +1,6 @@
 import { getTree, flattenTree, httpBookmarks } from "./lib/bookmarks.js";
 import { checkUrl, checkWayback, looksLikeAuth, STATUS } from "./lib/linkcheck.js";
-import { getScanState, patchScanState, getSettings } from "./lib/storage.js";
+import { getScanState, patchScanState, getSettings, getArchivedIds } from "./lib/storage.js";
 import { hostOf, sameSite } from "./lib/url.js";
 
 let scanning = false;
@@ -11,7 +11,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     try {
       switch (msg && msg.type) {
         case "scan:start":
-          startScan();
+          startScan(msg.mode === "full" ? "full" : "incremental");
           sendResponse({ ok: true, started: true });
           break;
         case "scan:stop":
@@ -59,7 +59,36 @@ export function isExcludedPath(path, excluded) {
   return segments.some((seg) => excluded.includes(seg));
 }
 
-async function startScan() {
+async function updateBadge() {
+  try {
+    const state = await getScanState();
+    const archived = await getArchivedIds();
+    const results = state && state.results ? state.results : {};
+    let n = 0;
+    for (const [id, r] of Object.entries(results)) {
+      if (archived.has(id)) continue;
+      if (r.status === STATUS.DEAD || r.status === STATUS.MOVED) n += 1;
+    }
+    const text = n > 999 ? "999+" : n > 0 ? String(n) : "";
+    await chrome.action.setBadgeText({ text });
+    if (n > 0) {
+      await chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+    }
+  } catch {
+    /* badge is best-effort */
+  }
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && (changes.scanState || changes.archivedIds)) {
+    updateBadge();
+  }
+});
+
+chrome.runtime.onStartup.addListener(updateBadge);
+chrome.runtime.onInstalled.addListener(updateBadge);
+
+async function startScan(mode) {
   if (scanning) return;
   scanning = true;
   stopRequested = false;
@@ -74,15 +103,32 @@ async function startScan() {
   const all = httpBookmarks(items);
   const targets = excluded.length ? all.filter((b) => !isExcludedPath(b.path, excluded)) : all;
   const skipped = all.length - targets.length;
+
+  const prev = await getScanState();
+  const prevResults = (prev && prev.results) || {};
+  const reuse = mode !== "full";
   const results = {};
-  const total = targets.length;
+  const queue = [];
+  let reused = 0;
+  for (const b of targets) {
+    const p = prevResults[b.id];
+    if (reuse && p && p.status && p.url === b.url) {
+      results[b.id] = p;
+      reused += 1;
+    } else {
+      queue.push(b);
+    }
+  }
+  const total = queue.length;
 
   await patchScanState({
     status: "scanning",
+    mode,
     startedAt,
     updatedAt: Date.now(),
     total,
     skipped,
+    reused,
     excludedFolders: settings.excludedFolders || [],
     processed: 0,
     results,
@@ -100,8 +146,8 @@ async function startScan() {
     while (!stopRequested) {
       const idx = cursor;
       cursor += 1;
-      if (idx >= targets.length) return;
-      const b = targets[idx];
+      if (idx >= queue.length) return;
+      const b = queue[idx];
       const result = await checkUrl(b.url, settings.timeoutMs);
       results[b.id] = { ...result, url: b.url, title: b.title };
       processed += 1;
@@ -125,6 +171,7 @@ async function startScan() {
       total,
       results
     });
+    await updateBadge();
   } catch (e) {
     await patchScanState({
       status: "error",
