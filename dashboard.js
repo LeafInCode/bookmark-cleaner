@@ -2,7 +2,7 @@ import * as i18n from "./lib/i18n.js";
 import * as storage from "./lib/storage.js";
 import * as bm from "./lib/bookmarks.js";
 import * as permissions from "./lib/permissions.js";
-import { buildPortrait } from "./lib/stats.js";
+import { buildPortrait, buildTimeSeries } from "./lib/stats.js";
 import { exportBackup, exportReportCsv, exportSharePage, stamp } from "./lib/export.js";
 import { STATUS } from "./lib/linkcheck.js";
 
@@ -516,7 +516,13 @@ function renderPortraitPanel() {
     </div>`;
   }).join("");
 
-  const chart = svgAreaChart(p.monthly);
+  const series = buildTimeSeries(state.items, yearFilter, state.portraitMonth);
+  const chart = svgAreaChart(series.points);
+  const chartTitle = yearFilter === "all"
+    ? i18n.t("chartTitleAll")
+    : (state.portraitMonth === "all"
+        ? i18n.t("chartTitleYear", { year: yearFilter })
+        : i18n.t("chartTitleMonth", { year: yearFilter, month: state.portraitMonth }));
   const locale = i18n.getLang() === "zh" ? "zh-CN" : "en-US";
   const monthOptions = [["all", i18n.t("portraitMonthAll")]].concat(
     Array.from({ length: 12 }, (_, i) => {
@@ -578,7 +584,7 @@ function renderPortraitPanel() {
       </div>
     </div>
     <div class="card">
-      <h3>${i18n.t("portraitMonthly")}</h3>
+      <h3>${chartTitle}</h3>
       <div class="chart-wrap" id="chart-wrap">
         ${chart || `<div class="muted small">${i18n.t("noItems")}</div>`}
         <div class="chart-tip" hidden></div>
@@ -613,10 +619,13 @@ function svgAreaChart(points) {
       <text x="${padL - 6}" y="${y + 4}" class="chart-axis" text-anchor="end">${Math.round(max * t)}</text>`;
   }).join("");
   const every = Math.max(1, Math.ceil(points.length / 8));
+  const isDay = points[0][0].length === 10;
+  const sameYear = points.every((p) => p[0].slice(0, 4) === points[0][0].slice(0, 4));
+  const fmtLabel = (label) => (isDay ? label.slice(8) : (sameYear ? label.slice(5) : label.slice(2)));
   const labels = points.map(([label], i) => {
     if (i % every !== 0 && i !== points.length - 1) return "";
     const x = padL + i * step;
-    return `<text x="${x.toFixed(1)}" y="${h - 8}" class="chart-axis" text-anchor="middle">${escapeHtml(label.slice(2))}</text>`;
+    return `<text x="${x.toFixed(1)}" y="${h - 8}" class="chart-axis" text-anchor="middle">${escapeHtml(fmtLabel(label))}</text>`;
   }).join("");
   const dots = coords.map(([x, y], i) =>
     `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="chart-dot"><title>${escapeHtml(points[i][0])}: ${points[i][1]}</title></circle>`
