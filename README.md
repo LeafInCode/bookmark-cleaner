@@ -54,6 +54,12 @@ bookmark-cleaner/
 - 数据只存于 `chrome.storage.local`（本机）
 - 链接检测会直接访问你的书签 URL（用于判断状态）；Wayback 查询仅发送 URL 到 archive.org
 - 无分析、无遥测、无第三方代码
+- 完整声明见 [privacy.html](privacy.html)
+
+## 支持作者（纯自愿）
+
+如果这个工具帮到了你，可以请作者喝杯柠檬水——**不影响任何功能**（全功能免费）。
+把收款码图片放到 `assets/support.png`，扩展内「设置 → 关于与支持」会显示。
 
 ## 开发
 
