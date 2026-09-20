@@ -233,8 +233,10 @@ body {
 .about-links { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
 .support-box { display: flex; justify-content: center; margin: 12px 0; }
 .support-qr {
-  width: 220px;
-  height: 220px;
+  max-width: 230px;
+  max-height: 330px;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 10px;
   border: 1px solid var(--border);
