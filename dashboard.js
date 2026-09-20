@@ -289,7 +289,12 @@ function renderItemRow(b, opts) {
     : (r.status ? tagFor(r.status) : "");
   const note = noteLabel(r.note);
   const noteHtml = note ? `<span class="muted small">${note}</span>` : "";
-  const actions = opts && opts.actions ? opts.actions(b, r) : "";
+  const panelActions = opts && opts.actions ? opts.actions(b, r) : "";
+  const archiveBtn = (state.activeTab === "dead" || state.activeTab === "blocked")
+    ? `<button class="btn small ghost" data-action="archive-one" data-id="${b.id}">${i18n.t("archiveOne")}</button>`
+    : "";
+  const actions = `${panelActions}${archiveBtn}
+    <button class="btn small danger" data-action="delete-one" data-id="${b.id}">${i18n.t("deleteOne")}</button>`;
   const path = b.path ? `<span class="muted small">${escapeHtml(b.path)}</span>` : "";
   return `
     <div class="item${stripeClass(b, r)}" data-id="${b.id}">
@@ -301,6 +306,30 @@ function renderItemRow(b, opts) {
       </div>
       <div class="item-actions">${actions}</div>
     </div>`;
+}
+
+function renderSelectionBar() {
+  const bar = $("#selection-bar");
+  const sel = state.selection[state.activeTab];
+  if (!sel || !sel.size) {
+    bar.hidden = true;
+    bar.innerHTML = "";
+    return;
+  }
+  bar.hidden = false;
+  const moveBtn = state.activeTab === "empty"
+    ? ""
+    : `<button class="btn small" data-action="move-selected">${i18n.t("move")}</button>`;
+  const archiveBtn = (state.activeTab === "dead" || state.activeTab === "blocked")
+    ? `<button class="btn small ghost" data-action="archive-selected">${i18n.t("archive")}</button>`
+    : "";
+  bar.innerHTML = `
+    <span class="sel-count">${i18n.t("selectedBar", { n: sel.size })}</span>
+    ${archiveBtn}
+    ${moveBtn}
+    <button class="btn small ghost" data-action="open-selected">${i18n.t("open")}</button>
+    <button class="btn small danger" data-action="delete-selected">${i18n.t("delete")}</button>
+    <button class="btn small ghost" data-action="clear-selection">${i18n.t("clearSelection")}</button>`;
 }
 
 function hint(textKey) {
@@ -390,6 +419,7 @@ function renderDuplicatesPanel() {
           <span class="item-title">${escapeHtml(b.title || b.url)}</span>
           <span class="muted small">${idx === 0 ? "①" : ""}</span>
           <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(b.url)}">↗</button>
+          <button class="btn small danger" data-action="delete-one" data-id="${b.id}">${i18n.t("deleteOne")}</button>
         </div>`;
     }).join("");
     return `
@@ -415,6 +445,9 @@ function renderEmptyPanel() {
       <div class="item-main">
         <div class="item-title">📁 ${escapeHtml(f.title || "(untitled)")}</div>
         <div class="item-url">${escapeHtml(f.path || "")}</div>
+      </div>
+      <div class="item-actions">
+        <button class="btn small danger" data-action="delete-one" data-id="${f.id}">${i18n.t("deleteOne")}</button>
       </div>
     </div>`).join("");
   return renderToolbar("") + `<div class="list">${rows}</div>` + more;
@@ -477,13 +510,24 @@ function renderPortraitPanel() {
   const chart = svgAreaChart(p.monthly);
   return `
     <div class="year-row">${filterChips}</div>
-    <div class="portrait-grid">
-      <div class="stat-card grad-blue"><div class="num">${p.totalBookmarks}</div><div class="label">${i18n.t("totalBookmarks")}</div></div>
-      <div class="stat-card grad-purple"><div class="num">${p.totalFolders}</div><div class="label">${i18n.t("folders")}</div></div>
-      <div class="stat-card grad-red"><div class="num">${p.deadCount}<span class="unit">(${(p.deadRatio * 100).toFixed(1)}%)</span></div><div class="label">${i18n.t("deadLinks")}</div></div>
-      <div class="stat-card grad-amber"><div class="num">${p.duplicateCount}</div><div class="label">${i18n.t("duplicates")}</div></div>
-      <div class="stat-card grad-green"><div class="num">${p.spanDays}<span class="unit">${i18n.t("portraitDays")}</span></div><div class="label">${i18n.t("portraitSpan")}</div></div>
-      <div class="stat-card grad-cyan"><div class="num">${p.avgPerMonth}</div><div class="label">${i18n.t("portraitAvgMonth")}</div></div>
+    <div class="portrait-cols">
+      <div class="portrait-col">
+        <h4>${i18n.t("portraitTimeGroup")}</h4>
+        <div class="portrait-grid">
+          <div class="stat-card grad-blue"><div class="num">${p.totalBookmarks}</div><div class="label">${i18n.t("totalBookmarks")}</div></div>
+          <div class="stat-card grad-green"><div class="num">${p.spanDays}<span class="unit">${i18n.t("portraitDays")}</span></div><div class="label">${i18n.t("portraitSpan")}</div></div>
+          <div class="stat-card grad-cyan"><div class="num">${p.avgPerMonth}</div><div class="label">${i18n.t("portraitAvgMonth")}</div></div>
+          <div class="stat-card grad-purple"><div class="num">${p.mostActive ? p.mostActive[0] : "—"}<span class="unit">${p.mostActive ? p.mostActive[1] : ""}</span></div><div class="label">${i18n.t("portraitMostActive")}</div></div>
+        </div>
+      </div>
+      <div class="portrait-col">
+        <h4>${i18n.t("portraitStructGroup")}</h4>
+        <div class="portrait-grid">
+          <div class="stat-card grad-purple"><div class="num">${p.totalFolders}</div><div class="label">${i18n.t("folders")}</div></div>
+          <div class="stat-card grad-red"><div class="num">${p.deadCount}<span class="unit">(${(p.deadRatio * 100).toFixed(1)}%)</span></div><div class="label">${i18n.t("deadLinks")}</div></div>
+          <div class="stat-card grad-amber"><div class="num">${p.duplicateCount}</div><div class="label">${i18n.t("duplicates")}</div></div>
+        </div>
+      </div>
     </div>
     <div class="card">
       <h3>${i18n.t("portraitMonthly")}</h3>
@@ -559,6 +603,7 @@ function renderAll() {
   renderScanStatus();
   renderListControls();
   renderPanel();
+  renderSelectionBar();
 }
 
 function toast(msg) {
@@ -755,6 +800,7 @@ function bindEvents() {
       const sel = state.selection[state.activeTab];
       if (cb.checked) sel.add(id); else sel.delete(id);
       renderPanel();
+      renderSelectionBar();
       return;
     }
     const all = e.target.closest("#select-all");
@@ -765,6 +811,7 @@ function bindEvents() {
         visibleItems(currentTabItems()).forEach((x) => sel.add(x.id));
       }
       renderPanel();
+      renderSelectionBar();
     }
   });
 
@@ -777,11 +824,46 @@ function bindEvents() {
     }
     const btn = e.target.closest("[data-action]");
     if (!btn) return;
-    const action = btn.getAttribute("data-action");
-    const id = btn.getAttribute("data-id");
+    await handleAction(btn.getAttribute("data-action"), btn.getAttribute("data-id"), btn);
+  });
+
+  $("#selection-bar").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    await handleAction(btn.getAttribute("data-action"), btn.getAttribute("data-id"), btn);
+  });
+
+  async function handleAction(action, id, btn) {
     if (action === "show-more") {
       state.limit += 100;
       renderPanel();
+      return;
+    }
+    if (action === "clear-selection") {
+      state.selection[state.activeTab].clear();
+      renderAll();
+      return;
+    }
+    if (action === "delete-one") {
+      const { trashEntries } = await bm.removeWithSnapshot([id]);
+      if (trashEntries.length) await storage.addToTrash(trashEntries);
+      state.selection[state.activeTab].delete(id);
+      await refreshData();
+      renderAll();
+      toast(i18n.t("deleteDone", { n: trashEntries.length }));
+      return;
+    }
+    if (action === "archive-one" || action === "archive-selected") {
+      const ids = action === "archive-one" ? [id] : [...state.selection[state.activeTab]];
+      if (!ids.length) return;
+      const name = state.activeTab === "dead" ? i18n.t("defaultArchiveFolder") : i18n.t("unverifiableArchiveFolder");
+      const existing = state.items.find((x) => x.type === "folder" && x.title === name && x.parentId === "1");
+      const folderId = existing ? existing.id : (await bm.createFolder("1", name)).id;
+      const moved = await bm.moveBookmarks(ids, folderId);
+      state.selection[state.activeTab].clear();
+      await refreshData();
+      renderAll();
+      toast(i18n.t("moveDone", { n: moved }));
       return;
     }
     if (action === "delete-selected") return deleteSelected();
@@ -865,7 +947,7 @@ function bindEvents() {
       toast(i18n.t("deleteDone", { n: trashEntries.length }));
       return;
     }
-  });
+  }
 
   $("#btn-scan").addEventListener("click", async () => {
     const s = state.scan;
