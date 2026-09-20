@@ -765,6 +765,7 @@ async function deleteSelected() {
   if (!ok) return;
   const { trashEntries, errors } = await bm.removeWithSnapshot(ids);
   if (trashEntries.length) await storage.addToTrash(trashEntries);
+  await logOp({ type: "delete", titles: trashEntries.map((t) => t.title || t.url || "") });
   state.selection[tab].clear();
   await refreshData();
   renderAll();
@@ -812,7 +813,13 @@ async function archiveDead() {
   const ok = await confirmModal(`${i18n.t("archive")}: ${ids.length} → "${name}"`);
   if (!ok) return;
   const folder = await bm.createFolder("1", name);
+  const snapshot = ids.map((bid) => {
+    const b = state.items.find((x) => x.id === bid) || {};
+    return { id: bid, title: b.title || b.url || bid, parentId: b.parentId || null };
+  });
   const moved = await bm.moveBookmarks(ids, folder.id);
+  await storage.addArchivedIds(ids);
+  await logOp({ type: "archive", titles: snapshot.map((x) => x.title), items: snapshot });
   await refreshData();
   renderAll();
   toast(i18n.t("moveDone", { n: moved }));
@@ -840,7 +847,12 @@ async function moveSelected() {
       root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
       root.querySelector('[data-modal="ok"]').addEventListener("click", async () => {
         const parentId = root.querySelector("#move-target").value;
+        const snapshot = ids.map((bid) => {
+          const b = state.items.find((x) => x.id === bid) || {};
+          return { id: bid, title: b.title || b.url || bid, parentId: b.parentId || null };
+        });
         const moved = await bm.moveBookmarks(ids, parentId);
+        await logOp({ type: "move", titles: snapshot.map((x) => x.title), items: snapshot });
         state.selection[tab].clear();
         await refreshData();
         renderAll();
@@ -1001,6 +1013,171 @@ async function doImport(file, target, dedupe) {
   }
 }
 
+async function logOp(entry) {
+  try {
+    await storage.addOpLog(entry);
+  } catch {
+    /* non-critical */
+  }
+}
+
+function showHistory() {
+  storage.getOpLog().then((log) => {
+    const typeLabel = {
+      archive: "opArchive",
+      move: "opMove",
+      url: "opUrl",
+      "mark-ok": "opMarkOk",
+      delete: "opDelete"
+    };
+    const rows = log.length
+      ? log.map((e, i) => {
+          const titles = (e.titles || []).slice(0, 3).join("、");
+          const more = (e.titles || []).length > 3 ? ` 等 ${e.titles.length} 项` : "";
+          const undoable = e.type !== "delete";
+          return `
+            <div class="trash-item">
+              <div class="item-main">
+                <div class="item-title"><span class="tag">${i18n.t(typeLabel[e.type] || e.type)}</span> ${escapeHtml(titles)}${more}</div>
+                <div class="item-url">${new Date(e.at).toLocaleString()}${e.type === "delete" ? ` · ${i18n.t("deletedHint")}` : ""}</div>
+              </div>
+              ${undoable ? `<button class="btn small" data-undo="${i}">${i18n.t("undo")}</button>` : ""}
+            </div>`;
+        }).join("")
+      : `<div class="muted small">${i18n.t("historyEmpty")}</div>`;
+    openModal(
+      `<h3>${i18n.t("history")}</h3>${rows}
+       <div class="modal-actions">
+         <button class="btn" data-modal="close">${i18n.t("close")}</button>
+       </div>`,
+      (root, close) => {
+        root.querySelector('[data-modal="close"]').addEventListener("click", close);
+        root.querySelectorAll("[data-undo]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const idx = Number(btn.getAttribute("data-undo"));
+            const log = await storage.getOpLog();
+            const entry = log[idx];
+            if (!entry) return;
+            const ok = await undoEntry(entry);
+            if (ok) {
+              log.splice(idx, 1);
+              await storage.setOpLog(log);
+            }
+            await refreshData();
+            renderAll();
+            close();
+            showHistory();
+            if (ok) toast(i18n.t("undoDone"));
+          });
+        });
+      }
+    );
+  });
+}
+
+async function undoEntry(entry) {
+  try {
+    if (entry.type === "archive" || entry.type === "move") {
+      const ids = (entry.items || []).map((x) => x.id);
+      for (const item of entry.items || []) {
+        if (item.parentId) {
+          try {
+            await chrome.bookmarks.move(item.id, { parentId: item.parentId });
+          } catch {
+            /* parent gone */
+          }
+        }
+      }
+      await storage.removeArchivedIds(ids);
+      return true;
+    }
+    if (entry.type === "url" && entry.id && entry.prevUrl) {
+      await bm.updateBookmarkUrl(entry.id, entry.prevUrl);
+      return true;
+    }
+    if (entry.type === "mark-ok" && entry.id) {
+      const st = await storage.getScanState();
+      if (st && st.results && st.results[entry.id]) {
+        st.results[entry.id] = {
+          ...st.results[entry.id],
+          status: entry.prevStatus || "blocked",
+          note: entry.prevNote || null,
+          checkedAt: Date.now()
+        };
+        await storage.setScanState(st);
+        state.scan = st;
+      }
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function showTimeMachine() {
+  const renderBody = () => {
+    const now = new Date();
+    const md = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const bookmarks = state.items.filter((x) => x.type === "bookmark" && x.url && x.dateAdded);
+    const onThisDay = bookmarks
+      .filter((b) => {
+        const d = new Date(b.dateAdded);
+        const key = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        return key === md && d.getFullYear() < now.getFullYear();
+      })
+      .sort((a, b) => b.dateAdded - a.dateAdded);
+    const shuffled = [...bookmarks].sort(() => Math.random() - 0.5).slice(0, 6);
+    const row = (b) => `
+      <div class="trash-item">
+        <div class="item-main">
+          <div class="item-title">${escapeHtml(b.title || b.url)}</div>
+          <div class="item-url">${new Date(b.dateAdded).toLocaleDateString()} · ${escapeHtml(b.url)}</div>
+        </div>
+        <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(b.url)}">↗</button>
+      </div>`;
+    const dayHtml = onThisDay.length ? onThisDay.slice(0, 10).map(row).join("") : `<div class="muted small">${i18n.t("noOnThisDay")}</div>`;
+    return `
+      <h3>🕰 ${i18n.t("onThisDay")}</h3>
+      ${dayHtml}
+      <h3 style="margin-top:16px">🎲 ${i18n.t("randomPicks")}
+        <button class="btn small" id="tm-shuffle" style="margin-left:8px">${i18n.t("refresh")}</button>
+      </h3>
+      <div id="tm-random">${shuffled.map(row).join("")}</div>`;
+  };
+  openModal(
+    `${renderBody()}
+     <div class="modal-actions">
+       <button class="btn" data-modal="close">${i18n.t("close")}</button>
+     </div>`,
+    (root, close) => {
+      root.querySelector('[data-modal="close"]').addEventListener("click", close);
+      root.addEventListener("click", (e) => {
+        const shuffle = e.target.closest("#tm-shuffle");
+        if (shuffle) {
+          const bookmarks = state.items.filter((x) => x.type === "bookmark" && x.url && x.dateAdded);
+          const shuffled = [...bookmarks].sort(() => Math.random() - 0.5).slice(0, 6);
+          const row = (b) => `
+            <div class="trash-item">
+              <div class="item-main">
+                <div class="item-title">${escapeHtml(b.title || b.url)}</div>
+                <div class="item-url">${new Date(b.dateAdded).toLocaleDateString()} · ${escapeHtml(b.url)}</div>
+              </div>
+              <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(b.url)}">↗</button>
+            </div>`;
+          root.querySelector("#tm-random").innerHTML = shuffled.map(row).join("");
+          return;
+        }
+        const open = e.target.closest("[data-action='open-one']");
+        if (open) {
+          const url = open.getAttribute("data-url");
+          if (url) chrome.tabs.create({ url });
+        }
+      });
+    }
+  );
+}
+
 async function showTrash() {
   const trash = await storage.getTrash();
   const rows = trash.length
@@ -1147,8 +1324,10 @@ function bindEvents() {
       return;
     }
     if (action === "delete-one") {
+      const b = state.items.find((x) => x.id === id);
       const { trashEntries } = await bm.removeWithSnapshot([id]);
       if (trashEntries.length) await storage.addToTrash(trashEntries);
+      await logOp({ type: "delete", titles: [b ? b.title || b.url : id] });
       state.selection[state.activeTab].delete(id);
       await refreshData();
       renderAll();
@@ -1158,9 +1337,12 @@ function bindEvents() {
     if (action === "mark-ok") {
       const st = await storage.getScanState();
       if (st && st.results && st.results[id]) {
-        st.results[id] = { ...st.results[id], status: STATUS.OK, note: "manual_confirmed", checkedAt: Date.now() };
+        const prev = st.results[id];
+        st.results[id] = { ...prev, status: STATUS.OK, note: "manual_confirmed", checkedAt: Date.now() };
         await storage.setScanState(st);
         state.scan = st;
+        const b = state.items.find((x) => x.id === id);
+        await logOp({ type: "mark-ok", id, titles: [b ? b.title || b.url : id], prevStatus: prev.status, prevNote: prev.note || null });
       }
       renderAll();
       toast(i18n.t("updated"));
@@ -1172,8 +1354,13 @@ function bindEvents() {
       const name = state.activeTab === "dead" ? i18n.t("defaultArchiveFolder") : i18n.t("unverifiableArchiveFolder");
       const existing = state.items.find((x) => x.type === "folder" && x.title === name && x.parentId === "1");
       const folderId = existing ? existing.id : (await bm.createFolder("1", name)).id;
+      const snapshot = ids.map((bid) => {
+        const b = state.items.find((x) => x.id === bid) || {};
+        return { id: bid, title: b.title || b.url || bid, parentId: b.parentId || null };
+      });
       const moved = await bm.moveBookmarks(ids, folderId);
       await storage.addArchivedIds(ids);
+      await logOp({ type: "archive", titles: snapshot.map((x) => x.title), items: snapshot });
       state.selection[state.activeTab].clear();
       await refreshData();
       renderAll();
@@ -1192,7 +1379,10 @@ function bindEvents() {
     if (action === "update-url") {
       const url = btn.getAttribute("data-url");
       if (url) {
+        const b = state.items.find((x) => x.id === id);
+        const prevUrl = b ? b.url : null;
         await bm.updateBookmarkUrl(id, url);
+        await logOp({ type: "url", id, titles: [b ? b.title || b.url : id], prevUrl });
         state.updated.add(id);
         await refreshData();
         renderAll();
@@ -1296,6 +1486,8 @@ function bindEvents() {
     toast(i18n.t("exportDone"));
   });
   $("#btn-share").addEventListener("click", exportShare);
+  $("#btn-history").addEventListener("click", showHistory);
+  $("#btn-timemachine").addEventListener("click", showTimeMachine);
   $("#btn-trash").addEventListener("click", showTrash);
 
   $("#lang-select").addEventListener("change", async (e) => {
