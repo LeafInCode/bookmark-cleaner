@@ -50,16 +50,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true;
 });
 
+export function isExcludedPath(path, excluded) {
+  if (!excluded || !excluded.length) return false;
+  const segments = String(path || "")
+    .split(" / ")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return segments.some((seg) => excluded.includes(seg));
+}
+
 async function startScan() {
   if (scanning) return;
   scanning = true;
   stopRequested = false;
   const settings = await getSettings();
+  const excluded = (settings.excludedFolders || [])
+    .map((s) => String(s || "").trim().toLowerCase())
+    .filter(Boolean);
   const startedAt = Date.now();
 
   const tree = await getTree();
   const items = flattenTree(tree);
-  const targets = httpBookmarks(items);
+  const all = httpBookmarks(items);
+  const targets = excluded.length ? all.filter((b) => !isExcludedPath(b.path, excluded)) : all;
+  const skipped = all.length - targets.length;
   const results = {};
   const total = targets.length;
 
@@ -68,6 +82,8 @@ async function startScan() {
     startedAt,
     updatedAt: Date.now(),
     total,
+    skipped,
+    excludedFolders: settings.excludedFolders || [],
     processed: 0,
     results,
     summary: null,

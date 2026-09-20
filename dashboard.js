@@ -27,7 +27,8 @@ const state = {
   dateRange: "all",
   sort: "default",
   limit: 100,
-  trashCount: 0
+  trashCount: 0,
+  settings: null
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -124,6 +125,7 @@ async function refreshData() {
   state.archivedIds = await storage.getArchivedIds();
   const trash = await storage.getTrash();
   state.trashCount = trash.length;
+  state.settings = await storage.getSettings();
   const bookmarks = state.items.filter((x) => x.type === "bookmark");
   state.duplicates = bm.findDuplicates(bookmarks);
   state.emptyFolders = bm.findEmptyFolders(state.items);
@@ -165,9 +167,50 @@ function renderScanStatus() {
         empty: state.emptyFolders.length,
         moved,
         blocked
-      });
+      }) + (s.skipped ? ` · ${i18n.t("scanSkipped", { n: s.skipped })}` : "");
     }
   }
+}
+
+function renderExcludedHint() {
+  const el = $("#excluded-hint");
+  if (!el) return;
+  const excluded = (state.settings && state.settings.excludedFolders) || [];
+  if (!excluded.length) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = `${i18n.t("excludedLabel")}: <strong>${escapeHtml(excluded.join("、"))}</strong> · <a href="#" id="open-settings">${i18n.t("settings")}</a>`;
+}
+
+function showSettings() {
+  const excluded = (state.settings && state.settings.excludedFolders) || [];
+  openModal(
+    `<h3>${i18n.t("settingsTitle")}</h3>
+     <div class="form-row" style="align-items:flex-start">
+       <label>${i18n.t("excludedFoldersLabel")}</label>
+       <input id="excluded-input" class="select" value="${escapeHtml(excluded.join(", "))}">
+     </div>
+     <div class="muted small" style="margin:-4px 0 8px 100px">${i18n.t("excludedFoldersHint")}</div>
+     <div class="modal-actions">
+       <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
+       <button class="btn primary" data-modal="ok">${i18n.t("save")}</button>
+     </div>`,
+    (root, close) => {
+      root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
+      root.querySelector('[data-modal="ok"]').addEventListener("click", async () => {
+        const raw = root.querySelector("#excluded-input").value || "";
+        const list = raw
+          .split(/[,，、]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        state.settings = await storage.setSettings({ excludedFolders: list });
+        close();
+        renderExcludedHint();
+        toast(i18n.t("saved"));
+      });
+    }
+  );
 }
 
 function renderTabs() {
@@ -758,6 +801,7 @@ function renderAll() {
   renderTabs();
   renderScanStatus();
   renderTopbar();
+  renderExcludedHint();
   renderListControls();
   renderPanel();
   renderSelectionBar();
@@ -1714,6 +1758,13 @@ function bindEvents() {
   $("#btn-history").addEventListener("click", showHistory);
   $("#btn-timemachine").addEventListener("click", showTimeMachine);
   $("#btn-unvisited").addEventListener("click", checkUnvisited);
+  $("#btn-settings").addEventListener("click", showSettings);
+  $("#excluded-hint").addEventListener("click", (e) => {
+    if (e.target.closest("#open-settings")) {
+      e.preventDefault();
+      showSettings();
+    }
+  });
   $("#btn-trash").addEventListener("click", showTrash);
 
   $("#lang-select").addEventListener("change", async (e) => {
