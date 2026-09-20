@@ -197,6 +197,9 @@ function noteLabel(note) {
     redirect: "noteRedirect",
     unknown: "noteUnknown",
     browser_verified: "noteBrowserVerified",
+    browser_not_found: "noteBrowserNotFound",
+    browser_server_error: "noteBrowserServerError",
+    browser_blocked: "noteBrowserBlocked",
     browser_error: "noteBrowserError",
     browser_unverified: "noteBrowserUnverified"
   };
@@ -727,18 +730,25 @@ function bindEvents() {
       const resp = await chrome.runtime.sendMessage({ type: "browser:verify", url: b.url });
       const st = await storage.getScanState();
       if (st && st.results && st.results[id]) {
-        if (resp && resp.verified) {
-          st.results[id] = { ...st.results[id], status: STATUS.OK, note: "browser_verified", checkedAt: Date.now() };
-        } else if (resp && resp.fatal) {
-          st.results[id] = { ...st.results[id], status: STATUS.DEAD, note: "browser_error", checkedAt: Date.now() };
+        const prev = st.results[id];
+        if (resp && resp.status) {
+          st.results[id] = {
+            ...prev,
+            status: resp.status,
+            code: resp.code || prev.code,
+            finalUrl: resp.finalUrl || prev.finalUrl,
+            movedTo: resp.movedTo || prev.movedTo,
+            note: resp.note || "browser_verified",
+            checkedAt: Date.now()
+          };
         } else {
-          st.results[id] = { ...st.results[id], note: "browser_unverified", checkedAt: Date.now() };
+          st.results[id] = { ...prev, note: "browser_unverified", checkedAt: Date.now() };
         }
         await storage.setScanState(st);
         state.scan = st;
       }
       renderAll();
-      toast(resp && resp.verified ? i18n.t("browserVerified") : i18n.t("browserFailed"));
+      toast(resp && resp.status === STATUS.OK ? i18n.t("browserVerified") : i18n.t("browserFailed"));
       return;
     }
     if (action === "keep-first") {

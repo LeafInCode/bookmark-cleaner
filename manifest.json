@@ -1,10 +1,19 @@
 {
   "manifest_version": 3,
   "name": "书签清理助手",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "本地清理失效/重复书签与空文件夹，支持归档、搬家检测与 Wayback 救援。全程本地运行，不上传任何数据。",
-  "permissions": ["bookmarks", "storage", "alarms", "unlimitedStorage", "webNavigation"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "alarms",
+    "unlimitedStorage",
+    "webNavigation",
+    "webRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"

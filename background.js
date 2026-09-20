@@ -1,6 +1,7 @@
 import { getTree, flattenTree, httpBookmarks } from "./lib/bookmarks.js";
-import { checkUrl, checkWayback, STATUS } from "./lib/linkcheck.js";
+import { checkUrl, checkWayback, looksLikeAuth, STATUS } from "./lib/linkcheck.js";
 import { getScanState, patchScanState, getSettings } from "./lib/storage.js";
+import { hostOf, sameSite } from "./lib/url.js";
 
 let scanning = false;
 let stopRequested = false;
@@ -147,7 +148,7 @@ function verifyInBrowser(url) {
     let done = false;
     let tabId = null;
     const cleanup = () => {
-      chrome.webNavigation.onCompleted.removeListener(onCompleted);
+      chrome.webRequest.onCompleted.removeListener(onWebCompleted);
       chrome.webNavigation.onErrorOccurred.removeListener(onError);
       clearTimeout(timer);
       if (tabId !== null) {
@@ -160,23 +161,46 @@ function verifyInBrowser(url) {
       cleanup();
       resolve(result);
     };
-    const onCompleted = (d) => {
-      if (d.tabId === tabId && d.frameId === 0) {
-        finish({ verified: true, finalUrl: d.url });
+    const onWebCompleted = (d) => {
+      if (d.tabId !== tabId || d.frameId !== 0 || d.type !== "main_frame") return;
+      const code = d.statusCode;
+      const finalUrl = d.url || url;
+      const crossSite = hostOf(finalUrl) && !sameSite(finalUrl, url);
+      if (code >= 200 && code < 300) {
+        if (crossSite && !looksLikeAuth(finalUrl)) {
+          finish({ status: STATUS.MOVED, code, finalUrl, movedTo: finalUrl, note: "browser_verified" });
+        } else {
+          finish({ status: STATUS.OK, code, finalUrl, note: "browser_verified" });
+        }
+      } else if (code === 404 || code === 410) {
+        finish({ status: STATUS.DEAD, code, finalUrl, note: "browser_not_found" });
+      } else if (code >= 500) {
+        finish({ status: STATUS.SERVER_ERROR, code, finalUrl, note: "browser_server_error" });
+      } else {
+        finish({ status: STATUS.BLOCKED, code, finalUrl, note: "browser_blocked" });
       }
     };
     const onError = (d) => {
-      if (d.tabId === tabId && d.frameId === 0) {
-        const fatal = FATAL_ERRORS.some((x) => String(d.error || "").includes(x));
-        finish({ verified: false, fatal, error: d.error || "unknown" });
-      }
+      if (d.tabId !== tabId || d.frameId !== 0) return;
+      const fatal = FATAL_ERRORS.some((x) => String(d.error || "").includes(x));
+      finish({
+        status: fatal ? STATUS.DEAD : STATUS.BLOCKED,
+        error: d.error || "unknown",
+        note: fatal ? "browser_error" : "browser_unverified"
+      });
     };
-    chrome.webNavigation.onCompleted.addListener(onCompleted);
+    chrome.webRequest.onCompleted.addListener(onWebCompleted, {
+      urls: ["<all_urls>"],
+      types: ["main_frame"]
+    });
     chrome.webNavigation.onErrorOccurred.addListener(onError);
-    const timer = setTimeout(() => finish({ verified: false, fatal: false, error: "timeout" }), 25000);
+    const timer = setTimeout(
+      () => finish({ status: STATUS.BLOCKED, error: "timeout", note: "browser_unverified" }),
+      25000
+    );
     chrome.tabs.create({ url, active: false }, (tab) => {
       if (chrome.runtime.lastError || !tab) {
-        finish({ verified: false, fatal: false, error: "tab-create-failed" });
+        finish({ status: STATUS.BLOCKED, error: "tab-create-failed", note: "browser_unverified" });
         return;
       }
       tabId = tab.id;
