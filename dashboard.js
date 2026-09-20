@@ -238,8 +238,6 @@ function showSettings() {
     }
   );
 }
-  );
-}
 
 function renderTabs() {
   const tabs = [
