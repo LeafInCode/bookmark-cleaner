@@ -5,6 +5,7 @@ import * as permissions from "./lib/permissions.js";
 import { buildPortrait, buildTimeSeries } from "./lib/stats.js";
 import { exportBackup, exportReportCsv, exportSharePage, exportTree, stamp } from "./lib/export.js";
 import { STATUS } from "./lib/linkcheck.js";
+import { normalizeUrl } from "./lib/url.js";
 
 const state = {
   items: [],
@@ -13,10 +14,12 @@ const state = {
   duplicates: [],
   emptyFolders: [],
   activeTab: "dead",
-  selection: { dead: new Set(), duplicates: new Set(), empty: new Set(), moved: new Set(), blocked: new Set() },
+  selection: { dead: new Set(), duplicates: new Set(), empty: new Set(), moved: new Set(), blocked: new Set(), unvisited: new Set() },
   wayback: {},
   updated: new Set(),
   archivedIds: new Set(),
+  unvisited: new Set(),
+  unvisitedChecked: false,
   portraitYear: "all",
   portraitMonth: "all",
   portraitLimit: 50,
@@ -77,6 +80,8 @@ function currentTabItems() {
       return movedItems();
     case "blocked":
       return blockedItems();
+    case "unvisited":
+      return state.items.filter((b) => state.unvisited.has(b.id));
     default:
       return [];
   }
@@ -89,6 +94,7 @@ function currentTabIds() {
     case "empty": return state.emptyFolders.map((f) => f.id);
     case "moved": return movedItems().map((x) => x.id);
     case "blocked": return blockedItems().map((x) => x.id);
+    case "unvisited": return [...state.unvisited];
     default: return [];
   }
 }
@@ -170,9 +176,12 @@ function renderTabs() {
     ["duplicates", "tabDuplicates", dupItemIds().length],
     ["empty", "tabEmpty", state.emptyFolders.length],
     ["moved", "tabMoved", movedItems().length],
-    ["blocked", "tabBlocked", blockedItems().length],
-    ["portrait", "portrait", null]
+    ["blocked", "tabBlocked", blockedItems().length]
   ];
+  if (state.unvisitedChecked) {
+    tabs.push(["unvisited", "unvisited", state.unvisited.size]);
+  }
+  tabs.push(["portrait", "portrait", null]);
   $("#tabs").innerHTML = tabs
     .map(([key, labelKey, count]) => {
       const active = state.activeTab === key ? " active" : "";
@@ -370,10 +379,14 @@ function renderSelectionBar() {
   const archiveBtn = (state.activeTab === "dead" || state.activeTab === "blocked")
     ? `<button class="btn small ghost" data-action="archive-selected">${i18n.t("archive")}</button>`
     : "";
+  const titleBtn = state.activeTab === "empty"
+    ? ""
+    : `<button class="btn small" data-action="clean-titles" title="${i18n.t("tipCleanTitles")}">${i18n.t("cleanTitles")}</button>`;
   bar.innerHTML = `
     <span class="sel-count">${i18n.t("selectedBar", { n: sel.size })}</span>
     ${archiveBtn}
     ${moveBtn}
+    ${titleBtn}
     <button class="btn small ghost" data-action="open-selected">${i18n.t("open")}</button>
     <button class="btn small danger" data-action="delete-selected">${i18n.t("delete")}</button>
     <button class="btn small ghost" data-action="clear-selection">${i18n.t("clearSelection")}</button>`;
@@ -693,6 +706,17 @@ function emptyState() {
   return `<div class="empty-state">${i18n.t("allGood")}</div>`;
 }
 
+function renderUnvisitedPanel() {
+  const items = visibleItems(currentTabItems());
+  if (!items.length) return hint("unvisitedHint") + emptyState();
+  const { shown, more } = paginate(items);
+  return renderToolbar("") + hint("unvisitedHint") + `<div class="list">${shown.map((b) =>
+    renderItemRow(b, {
+      actions: (bb) => `<button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(bb.url)}">↗</button>`
+    })
+  ).join("")}</div>` + more;
+}
+
 function renderPanel() {
   const panel = $("#panel");
   switch (state.activeTab) {
@@ -701,6 +725,7 @@ function renderPanel() {
     case "empty": panel.innerHTML = renderEmptyPanel(); break;
     case "moved": panel.innerHTML = renderMovedPanel(); break;
     case "blocked": panel.innerHTML = renderBlockedPanel(); break;
+    case "unvisited": panel.innerHTML = renderUnvisitedPanel(); break;
     case "portrait": panel.innerHTML = renderPortraitPanel(); break;
     default: panel.innerHTML = "";
   }
@@ -1028,7 +1053,8 @@ function showHistory() {
       move: "opMove",
       url: "opUrl",
       "mark-ok": "opMarkOk",
-      delete: "opDelete"
+      delete: "opDelete",
+      title: "opTitle"
     };
     const rows = log.length
       ? log.map((e, i) => {
@@ -1093,6 +1119,18 @@ async function undoEntry(entry) {
     }
     if (entry.type === "url" && entry.id && entry.prevUrl) {
       await bm.updateBookmarkUrl(entry.id, entry.prevUrl);
+      return true;
+    }
+    if (entry.type === "title") {
+      for (const item of entry.items || []) {
+        if (item.id && item.prevTitle !== undefined) {
+          try {
+            await chrome.bookmarks.update(item.id, { title: item.prevTitle });
+          } catch {
+            /* skip */
+          }
+        }
+      }
       return true;
     }
     if (entry.type === "mark-ok" && entry.id) {
@@ -1173,6 +1211,106 @@ function showTimeMachine() {
           const url = open.getAttribute("data-url");
           if (url) chrome.tabs.create({ url });
         }
+      });
+    }
+  );
+}
+
+async function checkUnvisited() {
+  try {
+    const granted = await chrome.permissions.request({ permissions: ["history"] });
+    if (!granted) {
+      toast(i18n.t("permissionDenied"));
+      return;
+    }
+    const historyItems = await chrome.history.search({ text: "", startTime: 0, maxResults: 200000 });
+    const visited = new Set();
+    for (const h of historyItems) {
+      if (h.url) visited.add(normalizeUrl(h.url));
+    }
+    const ids = new Set();
+    for (const b of state.items) {
+      if (b.type !== "bookmark" || !b.url) continue;
+      if (!visited.has(normalizeUrl(b.url))) ids.add(b.id);
+    }
+    state.unvisited = ids;
+    state.unvisitedChecked = true;
+    state.activeTab = "unvisited";
+    state.limit = 100;
+    renderAll();
+    toast(`${i18n.t("unvisited")}: ${ids.size}`);
+  } catch (e) {
+    toast(String((e && e.message) || e));
+  }
+}
+
+function showCleanTitlesModal() {
+  const ids = [...state.selection[state.activeTab]];
+  const items = state.items.filter((b) => ids.includes(b.id) && b.url);
+  if (!items.length) return;
+  const defaultRule = "\\s*[-|_—–]\\s*[^-|_—–]{1,24}$";
+  openModal(
+    `<h3>${i18n.t("cleanTitles")}</h3>
+     <div class="form-row"><label>${i18n.t("titleRule")}</label>
+       <input id="title-rule" class="select" value="${escapeHtml(defaultRule)}">
+     </div>
+     <div id="title-preview" class="title-preview"></div>
+     <div class="modal-actions">
+       <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
+       <button class="btn primary" data-modal="ok">${i18n.t("apply")}</button>
+     </div>`,
+    (root, close) => {
+      const ruleInput = root.querySelector("#title-rule");
+      const preview = root.querySelector("#title-preview");
+      const compute = () => {
+        let re = null;
+        try {
+          re = new RegExp(ruleInput.value);
+        } catch {
+          re = null;
+        }
+        return items.map((b) => {
+          const oldTitle = b.title || "";
+          const next = re ? oldTitle.replace(re, "").trim() : oldTitle;
+          const newTitle = next || oldTitle;
+          return { id: b.id, oldTitle, newTitle, changed: !!(re && next && next !== oldTitle) };
+        });
+      };
+      const renderPreview = () => {
+        const results = compute();
+        const changed = results.filter((r) => r.changed);
+        const rows = results.slice(0, 20).map((r) => `
+          <div class="trash-item">
+            <div class="item-main">
+              <div class="item-title">${escapeHtml(r.oldTitle)}</div>
+              <div class="item-url">→ ${escapeHtml(r.changed ? r.newTitle : i18n.t("titleNoChange"))}</div>
+            </div>
+          </div>`).join("");
+        preview.innerHTML = `<div class="muted small" style="margin:8px 0">${i18n.t("titlePreview")}: ${changed.length}/${results.length}</div>${rows}`;
+      };
+      ruleInput.addEventListener("input", renderPreview);
+      renderPreview();
+      root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
+      root.querySelector('[data-modal="ok"]').addEventListener("click", async () => {
+        const results = compute().filter((r) => r.changed);
+        close();
+        if (!results.length) return;
+        for (const r of results) {
+          try {
+            await chrome.bookmarks.update(r.id, { title: r.newTitle });
+          } catch {
+            /* skip */
+          }
+        }
+        await logOp({
+          type: "title",
+          titles: results.map((r) => r.oldTitle),
+          items: results.map((r) => ({ id: r.id, prevTitle: r.oldTitle, newTitle: r.newTitle }))
+        });
+        state.selection[state.activeTab].clear();
+        await refreshData();
+        renderAll();
+        toast(i18n.t("updated"));
       });
     }
   );
@@ -1323,6 +1461,7 @@ function bindEvents() {
       renderAll();
       return;
     }
+    if (action === "clean-titles") return showCleanTitlesModal();
     if (action === "delete-one") {
       const b = state.items.find((x) => x.id === id);
       const { trashEntries } = await bm.removeWithSnapshot([id]);
@@ -1488,6 +1627,7 @@ function bindEvents() {
   $("#btn-share").addEventListener("click", exportShare);
   $("#btn-history").addEventListener("click", showHistory);
   $("#btn-timemachine").addEventListener("click", showTimeMachine);
+  $("#btn-unvisited").addEventListener("click", checkUnvisited);
   $("#btn-trash").addEventListener("click", showTrash);
 
   $("#lang-select").addEventListener("change", async (e) => {

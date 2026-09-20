@@ -171,3 +171,12 @@ body {
 .form-row .select { flex: 1; }
 .range-inputs { display: flex; align-items: center; gap: 8px; flex: 1; }
 .range-inputs input { flex: 1; min-width: 0; }
+
+.title-preview {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-top: 8px;
+}
