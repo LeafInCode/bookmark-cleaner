@@ -34,6 +34,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse({ ok: true, result });
           break;
         }
+        case "browser:verify": {
+          const res = await verifyInBrowser(msg.url);
+          sendResponse({ ok: true, ...res });
+          break;
+        }
         default:
           sendResponse({ ok: false, error: "unknown message" });
       }
@@ -126,5 +131,57 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     });
   }
 });
+
+const FATAL_ERRORS = [
+  "NAME_NOT_RESOLVED",
+  "NAME_RESOLUTION_FAILED",
+  "CONNECTION_REFUSED",
+  "CONNECTION_FAILED",
+  "CONNECTION_RESET",
+  "ADDRESS_UNREACHABLE",
+  "INTERNET_DISCONNECTED"
+];
+
+function verifyInBrowser(url) {
+  return new Promise((resolve) => {
+    let done = false;
+    let tabId = null;
+    const cleanup = () => {
+      chrome.webNavigation.onCompleted.removeListener(onCompleted);
+      chrome.webNavigation.onErrorOccurred.removeListener(onError);
+      clearTimeout(timer);
+      if (tabId !== null) {
+        chrome.tabs.remove(tabId).catch(() => {});
+      }
+    };
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(result);
+    };
+    const onCompleted = (d) => {
+      if (d.tabId === tabId && d.frameId === 0) {
+        finish({ verified: true, finalUrl: d.url });
+      }
+    };
+    const onError = (d) => {
+      if (d.tabId === tabId && d.frameId === 0) {
+        const fatal = FATAL_ERRORS.some((x) => String(d.error || "").includes(x));
+        finish({ verified: false, fatal, error: d.error || "unknown" });
+      }
+    };
+    chrome.webNavigation.onCompleted.addListener(onCompleted);
+    chrome.webNavigation.onErrorOccurred.addListener(onError);
+    const timer = setTimeout(() => finish({ verified: false, fatal: false, error: "timeout" }), 25000);
+    chrome.tabs.create({ url, active: false }, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        finish({ verified: false, fatal: false, error: "tab-create-failed" });
+        return;
+      }
+      tabId = tab.id;
+    });
+  });
+}
 
 export { STATUS };

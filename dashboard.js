@@ -14,7 +14,8 @@ const state = {
   activeTab: "dead",
   selection: { dead: new Set(), duplicates: new Set(), empty: new Set(), moved: new Set(), blocked: new Set() },
   wayback: {},
-  updated: new Set()
+  updated: new Set(),
+  portraitYear: "all"
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -189,11 +190,15 @@ function noteLabel(note) {
     timeout: "noteTimeout",
     network: "noteNetwork",
     not_found: "noteNotFound",
+    gateway_error: "noteGateway",
     auth: "noteAuth",
     method: "noteMethod",
     legal: "noteLegal",
     redirect: "noteRedirect",
-    unknown: "noteUnknown"
+    unknown: "noteUnknown",
+    browser_verified: "noteBrowserVerified",
+    browser_error: "noteBrowserError",
+    browser_unverified: "noteBrowserUnverified"
   };
   return note && map[note] ? i18n.t(map[note]) : "";
 }
@@ -284,7 +289,9 @@ function renderBlockedPanel() {
   if (!items.length) return hint("hintBlocked") + emptyState();
   return renderToolbar("") + hint("hintBlocked") + `<div class="list">${items.map((b) =>
     renderItemRow(b, {
-      actions: (bb) => `<button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(bb.url)}">↗</button>`
+      actions: (bb) => `
+        <button class="btn small" data-action="browser-verify" data-id="${bb.id}">${i18n.t("browserVerify")}</button>
+        <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(bb.url)}">↗</button>`
     })
   ).join("")}</div>`;
 }
@@ -330,18 +337,62 @@ function renderEmptyPanel() {
 }
 
 function renderPortraitPanel() {
-  const p = buildPortrait(state.items, state.scan ? state.scan.results : null, state.duplicates);
+  const yearFilter = state.portraitYear || "all";
+  const all = state.items;
+  const yearSet = new Set();
+  for (const b of all) {
+    if (b.type === "bookmark" && b.dateAdded) {
+      yearSet.add(String(new Date(b.dateAdded).getFullYear()));
+    }
+  }
+  const yearsDesc = [...yearSet].sort((a, b) => b.localeCompare(a));
+  const filtered = yearFilter === "all"
+    ? all
+    : all.filter((x) => x.type === "folder" || (x.dateAdded && String(new Date(x.dateAdded).getFullYear()) === yearFilter));
+  const ids = new Set(filtered.filter((x) => x.type === "bookmark" && x.url).map((x) => x.id));
+  const results = state.scan && state.scan.results
+    ? Object.fromEntries(Object.entries(state.scan.results).filter(([id]) => ids.has(id)))
+    : null;
+  const dups = yearFilter === "all"
+    ? state.duplicates
+    : state.duplicates
+        .map((g) => ({ ...g, items: g.items.filter((i) => ids.has(i.id)) }))
+        .filter((g) => g.items.length > 1);
+  const p = buildPortrait(filtered, results, dups);
   const maxDomain = p.topDomains.length ? p.topDomains[0].count : 1;
   const fmtDate = (b) => (b && b.dateAdded ? new Date(b.dateAdded).toLocaleDateString() : "—");
-  const domains = p.topDomains.map((d) => `
+  const palette = ["#2563eb", "#7c3aed", "#0891b2", "#059669", "#d97706", "#dc2626", "#4f46e5", "#0d9488", "#b45309", "#be185d"];
+  const yearColor = {};
+  yearsDesc.slice().reverse().forEach((y, i) => { yearColor[y] = palette[i % palette.length]; });
+
+  const yearCountsAll = new Map();
+  for (const b of all) {
+    if (b.type === "bookmark" && b.dateAdded) {
+      const y = String(new Date(b.dateAdded).getFullYear());
+      yearCountsAll.set(y, (yearCountsAll.get(y) || 0) + 1);
+    }
+  }
+  const filterChips = [
+    `<button class="year-chip ${yearFilter === "all" ? "active" : ""}" data-year="all">${i18n.t("allYears")} (${all.filter((x) => x.type === "bookmark" && x.url).length})</button>`
+  ].concat(
+    yearsDesc.map((y) => `<button class="year-chip ${yearFilter === y ? "active" : ""}" data-year="${y}">${y} (${yearCountsAll.get(y) || 0})</button>`)
+  ).join("");
+
+  const domains = p.topDomains.map((d) => {
+    const segs = d.years.map(([y, c]) =>
+      `<span class="seg" style="width:${((c / d.count) * 100).toFixed(1)}%;background:${yearColor[y] || "#94a3b8"}" title="${y}: ${c}"></span>`
+    ).join("");
+    return `
     <div class="bar-row">
       <span class="name" title="${escapeHtml(d.domain)}">${escapeHtml(d.domain)}</span>
-      <span class="bar"><div style="width:${Math.round((d.count / maxDomain) * 100)}%"></div></span>
+      <span class="bar stacked">${segs}</span>
       <span class="val">${d.count}</span>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+
   const chart = svgAreaChart(p.monthly);
-  const years = p.yearCounts.map(([y, c]) => `<span class="year-chip">${y}<b>${c}</b></span>`).join("");
   return `
+    <div class="year-row">${filterChips}</div>
     <div class="portrait-grid">
       <div class="stat-card grad-blue"><div class="num">${p.totalBookmarks}</div><div class="label">${i18n.t("totalBookmarks")}</div></div>
       <div class="stat-card grad-purple"><div class="num">${p.totalFolders}</div><div class="label">${i18n.t("folders")}</div></div>
@@ -353,7 +404,6 @@ function renderPortraitPanel() {
     <div class="card">
       <h3>${i18n.t("portraitMonthly")}</h3>
       ${chart || `<div class="muted small">${i18n.t("noItems")}</div>`}
-      <div class="year-row">${years}</div>
       ${p.mostActive ? `<div class="muted small">${i18n.t("portraitMostActive")}: ${p.mostActive[0]} (${p.mostActive[1]}) · ${i18n.t("portraitOldest")}: ${fmtDate(p.oldest)} · ${i18n.t("portraitNewest")}: ${fmtDate(p.newest)}</div>` : ""}
     </div>
     <div class="card"><h3>${i18n.t("portraitTopDomains")}</h3>${domains || `<div class="muted small">${i18n.t("noItems")}</div>`}</div>`;
@@ -620,6 +670,12 @@ function bindEvents() {
   });
 
   $("#panel").addEventListener("click", async (e) => {
+    const yearBtn = e.target.closest("[data-year]");
+    if (yearBtn) {
+      state.portraitYear = yearBtn.getAttribute("data-year");
+      renderPanel();
+      return;
+    }
     const btn = e.target.closest("[data-action]");
     if (!btn) return;
     const action = btn.getAttribute("data-action");
@@ -661,6 +717,28 @@ function bindEvents() {
       await refreshData();
       renderAll();
       toast(i18n.t("updated"));
+      return;
+    }
+    if (action === "browser-verify") {
+      const b = state.items.find((x) => x.id === id);
+      if (!b) return;
+      btn.disabled = true;
+      btn.textContent = "...";
+      const resp = await chrome.runtime.sendMessage({ type: "browser:verify", url: b.url });
+      const st = await storage.getScanState();
+      if (st && st.results && st.results[id]) {
+        if (resp && resp.verified) {
+          st.results[id] = { ...st.results[id], status: STATUS.OK, note: "browser_verified", checkedAt: Date.now() };
+        } else if (resp && resp.fatal) {
+          st.results[id] = { ...st.results[id], status: STATUS.DEAD, note: "browser_error", checkedAt: Date.now() };
+        } else {
+          st.results[id] = { ...st.results[id], note: "browser_unverified", checkedAt: Date.now() };
+        }
+        await storage.setScanState(st);
+        state.scan = st;
+      }
+      renderAll();
+      toast(resp && resp.verified ? i18n.t("browserVerified") : i18n.t("browserFailed"));
       return;
     }
     if (action === "keep-first") {

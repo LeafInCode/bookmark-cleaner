@@ -200,11 +200,29 @@
 .year-chip {
   font-size: 12px;
   background: #f1f5f9;
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 2px 10px;
+  padding: 3px 10px;
   color: var(--muted);
+  cursor: pointer;
+}
+.year-chip:hover { background: #e2e8f0; }
+.year-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  font-weight: 600;
 }
 .year-chip b { color: var(--text); margin-left: 5px; }
+
+.bar.stacked {
+  display: flex;
+  align-items: stretch;
+  background: #eef2f7;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.bar.stacked .seg { display: block; height: 100%; min-width: 2px; }
 
 @media (max-width: 640px) {
   .top-actions { width: 100%; }
