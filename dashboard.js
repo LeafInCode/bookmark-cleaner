@@ -1557,26 +1557,39 @@ async function showTrash() {
 function showSharePicker() {
   const bookmarks = state.items.filter((x) => x.type === "bookmark" && x.url);
   const picked = new Set(state.selection[state.activeTab] || []);
+  const fields = { title: true, url: true, path: true };
   let query = "";
   let limit = 60;
 
-  const renderList = (root) => {
+  const match = (b) => {
     const q = query.trim().toLowerCase();
-    let list = bookmarks;
-    if (q) {
-      list = bookmarks.filter((b) => [b.title, b.url, b.path].some((x) => (x || "").toLowerCase().includes(q)));
-    }
+    if (!q) return true;
+    if (fields.title && (b.title || "").toLowerCase().includes(q)) return true;
+    if (fields.url && (b.url || "").toLowerCase().includes(q)) return true;
+    if (fields.path && (b.path || "").toLowerCase().includes(q)) return true;
+    return false;
+  };
+
+  const renderList = (root) => {
+    const list = bookmarks.filter(match);
     const shown = list.slice(0, limit);
     const more = list.length > shown.length
       ? `<div class="show-more"><button class="btn" id="pick-more">${i18n.t("showMore")} (${i18n.t("remaining", { n: list.length - shown.length })})</button></div>`
       : "";
-    const rows = shown.map((b) => `
+    const rows = shown.map((b) => {
+      const hl = (text, on) => on && query.trim() ? text : "";
+      const titleMatch = fields.title && (b.title || "").toLowerCase().includes(query.trim().toLowerCase());
+      const urlMatch = fields.url && (b.url || "").toLowerCase().includes(query.trim().toLowerCase());
+      const pathMatch = fields.path && (b.path || "").toLowerCase().includes(query.trim().toLowerCase());
+      return `
       <div class="dup-item">
         <input type="checkbox" data-pick="${b.id}" ${picked.has(b.id) ? "checked" : ""}>
-        <span class="item-title">${escapeHtml(b.title || b.url)}</span>
-        <span class="muted small" style="flex-shrink:0">${escapeHtml((b.path || "").split(" / ").slice(-1)[0] || "")}</span>
+        <span class="pick-title ${titleMatch ? "hit" : ""}">${escapeHtml(b.title || b.url)}</span>
+        <span class="pick-url muted small ${urlMatch ? "hit" : ""}">${escapeHtml(b.url || "")}</span>
+        <span class="pick-path muted small ${pathMatch ? "hit" : ""}">${escapeHtml((b.path || "").split(" / ").slice(-1)[0] || "")}</span>
         <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(b.url)}">↗</button>
-      </div>`).join("");
+      </div>`;
+    }).join("");
     const body = rows ? `<div class="dup-items">${rows}</div>${more}` : `<div class="muted small">${i18n.t("pickNone")}</div>`;
     root.querySelector("#pick-body").innerHTML = body;
     root.querySelector("#pick-count").textContent = i18n.t("pickSelected", { n: picked.size });
@@ -1585,8 +1598,15 @@ function showSharePicker() {
   openModal(
     `<h3>${i18n.t("pickTitle")}</h3>
      <div class="form-row">
-       <label>${i18n.t("searchPlaceholder")}</label>
-       <input id="pick-search" class="select" type="search">
+       <input id="pick-search" class="select" type="search" placeholder="${i18n.t("searchPlaceholder")}">
+     </div>
+     <div class="pick-filters">
+       <label class="pick-filter pick-f-title ${fields.title ? "on" : ""}" data-field="title">📝 ${i18n.t("pickFieldTitle")}</label>
+       <label class="pick-filter pick-f-url ${fields.url ? "on" : ""}" data-field="url">🔗 ${i18n.t("pickFieldUrl")}</label>
+       <label class="pick-filter pick-f-path ${fields.path ? "on" : ""}" data-field="path">📁 ${i18n.t("pickFieldPath")}</label>
+       <span class="spacer"></span>
+       <button class="btn small" id="pick-all">${i18n.t("pickAllVisible")}</button>
+       <button class="btn small ghost" id="pick-clear">${i18n.t("pickClearAll")}</button>
      </div>
      <div id="pick-body" class="pick-list"></div>
      <div class="modal-actions">
@@ -1601,6 +1621,25 @@ function showSharePicker() {
       search.addEventListener("input", (e) => {
         query = e.target.value;
         limit = 60;
+        renderList(root);
+      });
+      root.querySelector(".pick-filters").addEventListener("click", (e) => {
+        const f = e.target.closest("[data-field]");
+        if (!f) return;
+        const key = f.getAttribute("data-field");
+        const active = Object.values(fields).filter(Boolean).length;
+        if (fields[key] && active === 1) return;
+        fields[key] = !fields[key];
+        f.classList.toggle("on", fields[key]);
+        renderList(root);
+      });
+      root.querySelector("#pick-all").addEventListener("click", () => {
+        const list = bookmarks.filter(match).slice(0, limit);
+        list.forEach((b) => picked.add(b.id));
+        renderList(root);
+      });
+      root.querySelector("#pick-clear").addEventListener("click", () => {
+        picked.clear();
         renderList(root);
       });
       root.querySelector("#pick-body").addEventListener("change", (e) => {
