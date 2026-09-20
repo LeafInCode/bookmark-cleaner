@@ -252,6 +252,15 @@ body {
   max-width: 280px;
 }
 
+.pick-list {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-top: 4px;
+}
+
 .title-preview {
   max-height: 280px;
   overflow: auto;

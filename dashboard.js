@@ -1554,6 +1554,88 @@ async function showTrash() {
   );
 }
 
+function showSharePicker() {
+  const bookmarks = state.items.filter((x) => x.type === "bookmark" && x.url);
+  const picked = new Set(state.selection[state.activeTab] || []);
+  let query = "";
+  let limit = 60;
+
+  const renderList = (root) => {
+    const q = query.trim().toLowerCase();
+    let list = bookmarks;
+    if (q) {
+      list = bookmarks.filter((b) => [b.title, b.url, b.path].some((x) => (x || "").toLowerCase().includes(q)));
+    }
+    const shown = list.slice(0, limit);
+    const more = list.length > shown.length
+      ? `<div class="show-more"><button class="btn" id="pick-more">${i18n.t("showMore")} (${i18n.t("remaining", { n: list.length - shown.length })})</button></div>`
+      : "";
+    const rows = shown.map((b) => `
+      <div class="dup-item">
+        <input type="checkbox" data-pick="${b.id}" ${picked.has(b.id) ? "checked" : ""}>
+        <span class="item-title">${escapeHtml(b.title || b.url)}</span>
+        <span class="muted small" style="flex-shrink:0">${escapeHtml((b.path || "").split(" / ").slice(-1)[0] || "")}</span>
+        <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(b.url)}">↗</button>
+      </div>`).join("");
+    const body = rows ? `<div class="dup-items">${rows}</div>${more}` : `<div class="muted small">${i18n.t("pickNone")}</div>`;
+    root.querySelector("#pick-body").innerHTML = body;
+    root.querySelector("#pick-count").textContent = i18n.t("pickSelected", { n: picked.size });
+  };
+
+  openModal(
+    `<h3>${i18n.t("pickTitle")}</h3>
+     <div class="form-row">
+       <label>${i18n.t("searchPlaceholder")}</label>
+       <input id="pick-search" class="select" type="search">
+     </div>
+     <div id="pick-body" class="pick-list"></div>
+     <div class="modal-actions">
+       <span class="muted small" id="pick-count" style="margin-right:auto"></span>
+       <button class="btn" data-modal="cancel">${i18n.t("cancel")}</button>
+       <button class="btn primary" id="pick-next">${i18n.t("confirm")}</button>
+     </div>`,
+    (root, close) => {
+      renderList(root);
+      const search = root.querySelector("#pick-search");
+      search.focus();
+      search.addEventListener("input", (e) => {
+        query = e.target.value;
+        limit = 60;
+        renderList(root);
+      });
+      root.querySelector("#pick-body").addEventListener("change", (e) => {
+        const cb = e.target.closest("[data-pick]");
+        if (!cb) return;
+        const id = cb.getAttribute("data-pick");
+        if (cb.checked) picked.add(id); else picked.delete(id);
+        root.querySelector("#pick-count").textContent = i18n.t("pickSelected", { n: picked.size });
+      });
+      root.querySelector("#pick-body").addEventListener("click", (e) => {
+        if (e.target.closest("#pick-more")) {
+          limit += 100;
+          renderList(root);
+          return;
+        }
+        const open = e.target.closest("[data-action='open-one']");
+        if (open) {
+          const url = open.getAttribute("data-url");
+          if (url) chrome.tabs.create({ url });
+        }
+      });
+      root.querySelector('[data-modal="cancel"]').addEventListener("click", close);
+      root.querySelector("#pick-next").addEventListener("click", () => {
+        if (!picked.size) {
+          toast(i18n.t("pickNeed"));
+          return;
+        }
+        const items = bookmarks.filter((b) => picked.has(b.id));
+        close();
+        showShareTitleModal(items);
+      });
+    }
+  );
+}
+
 function showShareTitleModal(items) {
   const domains = new Set();
   for (const b of items) {
@@ -1903,7 +1985,7 @@ function bindEvents() {
     exportReportCsv(state.items, state.scan ? state.scan.results : {}, stamp());
     toast(i18n.t("exportDone"));
   });
-  $("#btn-share").addEventListener("click", exportShare);
+  $("#btn-share").addEventListener("click", showSharePicker);
   $("#btn-history").addEventListener("click", showHistory);
   $("#btn-timemachine").addEventListener("click", showTimeMachine);
   $("#btn-unvisited").addEventListener("click", checkUnvisited);
