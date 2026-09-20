@@ -180,3 +180,57 @@ body {
   padding: 4px 10px;
   margin-top: 8px;
 }
+
+.tm-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 14px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.tm-tab {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--muted);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.tm-tab:hover { background: #f8fafc; }
+.tm-tab.active {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+.tm-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+.tm-card.tm-day {
+  border-left-color: #d97706;
+  background: linear-gradient(90deg, #fffbeb 0%, #fff 45%);
+}
+.tm-card.tm-random {
+  border-left-color: #7c3aed;
+  background: linear-gradient(90deg, #f5f3ff 0%, #fff 45%);
+}
+.tm-year {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.tm-day .tm-year { background: #fef3c7; color: #b45309; }
+.tm-random .tm-year { background: #ede9fe; color: #6d28d9; }
+.tm-shuffle-row { display: flex; justify-content: flex-end; margin-bottom: 10px; }

@@ -1154,56 +1154,67 @@ async function undoEntry(entry) {
 }
 
 function showTimeMachine() {
-  const renderBody = () => {
-    const now = new Date();
-    const md = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const bookmarks = state.items.filter((x) => x.type === "bookmark" && x.url && x.dateAdded);
-    const onThisDay = bookmarks
-      .filter((b) => {
-        const d = new Date(b.dateAdded);
-        const key = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        return key === md && d.getFullYear() < now.getFullYear();
-      })
-      .sort((a, b) => b.dateAdded - a.dateAdded);
-    const shuffled = [...bookmarks].sort(() => Math.random() - 0.5).slice(0, 6);
-    const row = (b) => `
-      <div class="trash-item">
+  const now = new Date();
+  const md = `${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const bookmarks = state.items.filter((x) => x.type === "bookmark" && x.url && x.dateAdded);
+  const onThisDay = bookmarks
+    .filter((b) => {
+      const d = new Date(b.dateAdded);
+      const key = `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      return key === md && d.getFullYear() < now.getFullYear();
+    })
+    .sort((a, b) => b.dateAdded - a.dateAdded);
+  const shuffle = () => [...bookmarks].sort(() => Math.random() - 0.5).slice(0, 8);
+  let randomPicks = shuffle();
+  let activeTm = "day";
+
+  const card = (b, kind) => {
+    const d = new Date(b.dateAdded);
+    const badge = kind === "day" ? i18n.t("yearsAgo", { n: now.getFullYear() - d.getFullYear() }) : d.getFullYear();
+    return `
+      <div class="tm-card tm-${kind}">
+        <span class="tm-year">${badge}</span>
         <div class="item-main">
           <div class="item-title">${escapeHtml(b.title || b.url)}</div>
-          <div class="item-url">${new Date(b.dateAdded).toLocaleDateString()} · ${escapeHtml(b.url)}</div>
+          <div class="item-url">${escapeHtml(b.url)}</div>
         </div>
         <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(b.url)}">↗</button>
       </div>`;
-    const dayHtml = onThisDay.length ? onThisDay.slice(0, 10).map(row).join("") : `<div class="muted small">${i18n.t("noOnThisDay")}</div>`;
-    return `
-      <h3>🕰 ${i18n.t("onThisDay")}</h3>
-      ${dayHtml}
-      <h3 style="margin-top:16px">🎲 ${i18n.t("randomPicks")}
-        <button class="btn small" id="tm-shuffle" style="margin-left:8px">${i18n.t("refresh")}</button>
-      </h3>
-      <div id="tm-random">${shuffled.map(row).join("")}</div>`;
   };
+
+  const bodyHtml = () => {
+    if (activeTm === "day") {
+      return onThisDay.length
+        ? onThisDay.slice(0, 12).map((b) => card(b, "day")).join("")
+        : `<div class="muted small">${i18n.t("noOnThisDay")}</div>`;
+    }
+    return `<div class="tm-shuffle-row"><button class="btn small" id="tm-shuffle">🎲 ${i18n.t("refresh")}</button></div>`
+      + randomPicks.map((b) => card(b, "random")).join("");
+  };
+
   openModal(
-    `${renderBody()}
+    `<h3>${i18n.t("timeMachine")}</h3>
+     <div class="tm-tabs">
+       <button class="tm-tab ${activeTm === "day" ? "active" : ""}" data-tm="day">🕰 ${i18n.t("onThisDay")} (${onThisDay.length})</button>
+       <button class="tm-tab ${activeTm === "random" ? "active" : ""}" data-tm="random">🎲 ${i18n.t("randomPicks")}</button>
+     </div>
+     <div id="tm-body">${bodyHtml()}</div>
      <div class="modal-actions">
        <button class="btn" data-modal="close">${i18n.t("close")}</button>
      </div>`,
     (root, close) => {
       root.querySelector('[data-modal="close"]').addEventListener("click", close);
       root.addEventListener("click", (e) => {
-        const shuffle = e.target.closest("#tm-shuffle");
-        if (shuffle) {
-          const bookmarks = state.items.filter((x) => x.type === "bookmark" && x.url && x.dateAdded);
-          const shuffled = [...bookmarks].sort(() => Math.random() - 0.5).slice(0, 6);
-          const row = (b) => `
-            <div class="trash-item">
-              <div class="item-main">
-                <div class="item-title">${escapeHtml(b.title || b.url)}</div>
-                <div class="item-url">${new Date(b.dateAdded).toLocaleDateString()} · ${escapeHtml(b.url)}</div>
-              </div>
-              <button class="btn small ghost" data-action="open-one" data-url="${escapeHtml(b.url)}">↗</button>
-            </div>`;
-          root.querySelector("#tm-random").innerHTML = shuffled.map(row).join("");
+        const tab = e.target.closest("[data-tm]");
+        if (tab) {
+          activeTm = tab.getAttribute("data-tm");
+          root.querySelectorAll(".tm-tab").forEach((t) => t.classList.toggle("active", t.getAttribute("data-tm") === activeTm));
+          root.querySelector("#tm-body").innerHTML = bodyHtml();
+          return;
+        }
+        if (e.target.closest("#tm-shuffle")) {
+          randomPicks = shuffle();
+          root.querySelector("#tm-body").innerHTML = bodyHtml();
           return;
         }
         const open = e.target.closest("[data-action='open-one']");
