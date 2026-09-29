@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>商店素材生成器 · 书签清理助手</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Noto Sans SC", system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background:#f1f5f9; padding:28px 40px 80px; }
+  .bar { position:sticky; top:0; z-index:10; background:#0f172a; color:#fff; border-radius:14px; padding:16px 24px; display:flex; align-items:center; gap:20px; margin-bottom:32px; }
+  .bar .t { font-weight:700; font-size:18px; }
+  .bar .d { color:#94a3b8; font-size:14px; flex:1; }
+  .bar label { font-size:13px; color:#cbd5e1; display:flex; align-items:center; gap:8px; }
+  .bar button { background:#2563eb; color:#fff; border:none; border-radius:10px; padding:10px 22px; font-size:15px; font-weight:700; cursor:pointer; }
+  .bar button:disabled { background:#94a3b8; cursor:wait; }
+  section { margin-bottom:40px; }
+  .head { display:flex; align-items:center; gap:14px; margin-bottom:12px; }
+  .head .n { font-size:17px; font-weight:700; color:#0f172a; }
+  .head .s { font-size:13px; color:#64748b; }
+  .head button { margin-left:auto; background:#2563eb; color:#fff; border:none; border-radius:8px; padding:8px 18px; font-size:14px; font-weight:700; cursor:pointer; }
+  .head button:disabled { background:#94a3b8; cursor:wait; }
+  .frame { overflow:hidden; border-radius:8px; box-shadow:0 8px 30px rgba(15,23,42,.14); }
+  .canvas { transform-origin:top left; }
+
+  /* ===== 画布组件 ===== */
+  .pillrow { display:flex; flex-direction:column; gap:14px; margin-top:4px; }
+  .pill { display:flex; align-items:center; gap:10px; padding:12px 22px; border-radius:999px; font-size:21px; font-weight:500; white-space:nowrap; }
+  .pill.light { border:1px solid rgba(37,99,235,.35); background:rgba(37,99,235,.07); color:#1e40af; }
+  .pill.dark { border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.06); color:#e2e8f0; }
+  .shot { border-radius:12px; overflow:hidden; box-shadow:0 48px 96px rgba(2,6,23,.38), 0 12px 32px rgba(2,6,23,.22); border:1px solid rgba(255,255,255,.14); background:#fff; }
+  .shot img { display:block; width:100%; }
+  .brand { display:flex; align-items:center; gap:16px; }
+  .brand img { border-radius:10px; }
+  .brand span { font-weight:700; }
+  .check { display:flex; align-items:center; gap:12px; font-size:21px; color:#334155; }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="t">商店素材生成器</div>
+  <div class="d">逐张检查 → 点击导出 PNG（精确像素）。半尺寸可读性：缩放拉到 0.2 模拟商店缩略图。</div>
+  <label>预览缩放 <input type="range" id="zoom" min="0.15" max="0.6" step="0.05" value="0.3"></label>
+  <button id="all" onclick="exportAll()">导出全部 7 张</button>
+</div>
+
+<!-- ============ S1 Hero ============ -->
+<section>
+  <div class="head"><span class="n">S1 Hero · 失效书签一眼找齐</span><span class="s">1280×800 → 01_hero.png</span><button onclick="ex('s1','01_hero.png',1280,800,this)">导出</button></div>
+  <div class="frame" id="frame-s1"><div class="canvas" id="s1" style="width:1280px;height:800px;background:#eef4ff;position:relative;overflow:hidden;display:flex;align-items:center;padding:0 72px;gap:48px;">
+    <div style="position:absolute;right:-180px;top:-180px;width:720px;height:720px;border-radius:50%;background:radial-gradient(circle, rgba(37,99,235,.16) 0%, rgba(37,99,235,0) 68%);"></div>
+    <div style="width:460px;display:flex;flex-direction:column;gap:30px;position:relative;">
+      <div class="brand"><img src="assets/icon.png" width="44" height="44"><span style="font-size:24px;color:#0f172a;">书签清理助手</span></div>
+      <div style="align-self:flex-start;padding:8px 18px;border-radius:8px;background:rgba(37,99,235,.1);color:#1d4ed8;font-size:19px;font-weight:700;">免费开源</div>
+      <div style="font-size:72px;font-weight:900;color:#0f172a;line-height:1.18;letter-spacing:-.01em;">失效书签，<br><span style="color:#2563eb;">一眼找齐</span></div>
+      <div style="font-size:25px;color:#475569;line-height:1.65;">扫描失效、重复、空文件夹与搬家链接，<br>自动分类，逐条给出原因。</div>
+      <div style="display:flex;flex-direction:column;gap:16px;margin-top:6px;">
+        <div class="check"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>404 / 超时 / 网络错误自动识别</div>
+        <div class="check"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>URL 归一化查重，忽略跟踪参数</div>
+        <div class="check"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>域名迁移检测，一键更新旧地址</div>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;justify-content:center;position:relative;"><div class="shot" style="width:640px;"><img src="assets/screenshots/01-cleanup.png"></div></div>
+  </div></div>
+</section>
+
+<!-- ============ S2 安全 ============ -->
+<section>
+  <div class="head"><span class="n">S2 安全 · 删错随时撤销</span><span class="s">1280×800 → 02_safety.png</span><button onclick="ex('s2','02_safety.png',1280,800,this)">导出</button></div>
+  <div class="frame" id="frame-s2"><div class="canvas" id="s2" style="width:1280px;height:800px;background:#0b1220;position:relative;overflow:hidden;display:flex;align-items:center;padding:0 72px;gap:48px;">
+    <div style="position:absolute;left:-200px;bottom:-220px;width:800px;height:800px;border-radius:50%;background:radial-gradient(circle, rgba(37,99,235,.28) 0%, rgba(37,99,235,0) 66%);"></div>
+    <div style="flex:1;display:flex;justify-content:center;position:relative;"><div class="shot" style="width:620px;"><img src="assets/screenshots/05-settings.png"></div></div>
+    <div style="width:480px;display:flex;flex-direction:column;gap:30px;position:relative;">
+      <div class="brand"><img src="assets/icon.png" width="44" height="44"><span style="font-size:24px;color:#fff;">书签清理助手</span></div>
+      <div style="font-size:72px;font-weight:900;color:#fff;line-height:1.18;">删错了？<br><span style="color:#60a5fa;">随时撤销</span></div>
+      <div style="font-size:25px;color:#94a3b8;line-height:1.65;">回收站暂存每一次删除，<br>完整备份一键回滚。</div>
+      <div class="pillrow">
+        <div class="pill dark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>回收站暂存全部删除</div>
+        <div class="pill dark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>操作日志，逐步撤销</div>
+        <div class="pill dark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>备份导出 · 一键回灌</div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<!-- ============ S3 画像 ============ -->
+<section>
+  <div class="head"><span class="n">S3 画像 · 收藏一目了然</span><span class="s">1280×800 → 03_portrait.png</span><button onclick="ex('s3','03_portrait.png',1280,800,this)">导出</button></div>
+  <div class="frame" id="frame-s3"><div class="canvas" id="s3" style="width:1280px;height:800px;background:#e8edf4;position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;padding:56px 64px 0;">
+    <div style="position:absolute;left:-160px;top:-160px;width:640px;height:640px;border-radius:50%;background:radial-gradient(circle, rgba(124,58,237,.12) 0%, rgba(124,58,237,0) 68%);"></div>
+    <div style="align-self:flex-start;display:flex;flex-direction:column;gap:14px;position:relative;margin-left:16px;">
+      <div style="font-size:56px;font-weight:900;color:#0f172a;line-height:1.2;">你的书签，<span style="color:#7c3aed;">一目了然</span></div>
+      <div style="font-size:24px;color:#475569;">新增趋势 · 死链率 · 年份分布 · Top 网站，全部图表化</div>
+    </div>
+    <div style="margin-top:40px;position:relative;"><div class="shot" style="width:980px;"><img src="assets/screenshots/02-portrait.png"></div></div>
+  </div></div>
+</section>
+
+<!-- ============ S4 时光机 ============ -->
+<section>
+  <div class="head"><span class="n">S4 整理 + 分享 · 还能这么美</span><span class="s">1280×800 → 04_share.png</span><button onclick="ex('s4','04_share.png',1280,800,this)">导出</button></div>
+  <div class="frame" id="frame-s4"><div class="canvas" id="s4" style="width:1280px;height:800px;background:linear-gradient(135deg, #0f0a2e 0%, #2e1065 55%, #4c1d95 100%);position:relative;overflow:hidden;display:flex;align-items:center;padding:0 72px;gap:48px;">
+    <div style="position:absolute;right:-160px;bottom:-200px;width:760px;height:760px;border-radius:50%;background:radial-gradient(circle, rgba(124,58,237,.38) 0%, rgba(124,58,237,0) 66%);"></div>
+    <div style="width:470px;display:flex;flex-direction:column;gap:30px;position:relative;">
+      <div class="brand"><img src="assets/icon.png" width="44" height="44"><span style="font-size:24px;color:#fff;">书签清理助手</span></div>
+      <div style="font-size:64px;font-weight:900;color:#fff;line-height:1.22;">书签理顺了，<br><span style="color:#a5b4fc;">还能这么美</span></div>
+      <div style="font-size:25px;color:#a5b4fc;line-height:1.65;">批量归档与整理，精选书签<br>生成分享页与长图海报。</div>
+      <div class="pillrow">
+        <div class="pill dark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>批量归档 · 标题清理</div>
+        <div class="pill dark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>精选书签集</div>
+        <div class="pill dark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c4b5fd" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>长图海报 · 四种主题</div>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;justify-content:center;position:relative;"><div class="shot" style="width:620px;"><img src="assets/screenshots/04-share.png"></div></div>
+  </div></div>
+</section>
+
+<!-- ============ S5 隐私 ============ -->
+<section>
+  <div class="head"><span class="n">S5 隐私 · 只属于你</span><span class="s">1280×800 → 05_trust.png</span><button onclick="ex('s5','05_trust.png',1280,800,this)">导出</button></div>
+  <div class="frame" id="frame-s5"><div class="canvas" id="s5" style="width:1280px;height:800px;background:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:44px;">
+    <div style="position:absolute;top:-220px;left:50%;transform:translateX(-50%);width:900px;height:560px;border-radius:50%;background:radial-gradient(ellipse, rgba(37,99,235,.08) 0%, rgba(37,99,235,0) 70%);"></div>
+    <img src="assets/icon.png" style="width:88px;height:88px;border-radius:20px;position:relative;">
+    <div style="font-size:60px;font-weight:900;color:#0f172a;position:relative;">你的书签，<span style="color:#2563eb;">只属于你</span></div>
+    <div style="font-size:26px;color:#64748b;position:relative;">全程本地运行，零上传，零追踪</div>
+    <div style="display:flex;gap:28px;margin-top:12px;position:relative;">
+      <div style="width:300px;padding:34px 28px;border-radius:20px;border:1px solid #e2e8f0;background:#fff;box-shadow:0 18px 44px rgba(15,23,42,.07);display:flex;flex-direction:column;align-items:center;gap:14px;">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <div style="font-size:26px;font-weight:700;color:#0f172a;">本地运行</div>
+        <div style="font-size:18px;color:#64748b;">所有操作在浏览器内完成</div>
+      </div>
+      <div style="width:300px;padding:34px 28px;border-radius:20px;border:1px solid #e2e8f0;background:#fff;box-shadow:0 18px 44px rgba(15,23,42,.07);display:flex;flex-direction:column;align-items:center;gap:14px;">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <div style="font-size:26px;font-weight:700;color:#0f172a;">零上传</div>
+        <div style="font-size:18px;color:#64748b;">书签数据不出你的设备</div>
+      </div>
+      <div style="width:300px;padding:34px 28px;border-radius:20px;border:1px solid #e2e8f0;background:#fff;box-shadow:0 18px 44px rgba(15,23,42,.07);display:flex;flex-direction:column;align-items:center;gap:14px;">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <div style="font-size:26px;font-weight:700;color:#0f172a;">开源 MIT</div>
+        <div style="font-size:18px;color:#64748b;">代码公开，可自行审计</div>
+      </div>
+    </div>
+    <div style="font-size:18px;color:#94a3b8;position:relative;">无账号 · 无分析 · 无广告 · 无第三方代码</div>
+  </div></div>
+</section>
+
+<!-- ============ Promo Small ============ -->
+<section>
+  <div class="head"><span class="n">Promo Small</span><span class="s">440×280 → promo-small-440x280.png</span><button onclick="ex('ps','promo-small-440x280.png',440,280,this)">导出</button></div>
+  <div class="frame" id="frame-ps"><div class="canvas" id="ps" style="width:440px;height:280px;background:linear-gradient(135deg, #1d4ed8 0%, #0b1220 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-70px;right:-70px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle, rgba(96,165,250,.35) 0%, rgba(96,165,250,0) 70%);"></div>
+    <img src="assets/icon.png" style="width:60px;height:60px;border-radius:14px;position:relative;">
+    <div style="font-size:38px;font-weight:900;color:#fff;position:relative;letter-spacing:.02em;">失效书签，一键清理</div>
+    <div style="font-size:16px;color:rgba(255,255,255,.78);position:relative;letter-spacing:.12em;">失效 · 重复 · 空文件夹 · 全程本地</div>
+  </div></div>
+</section>
+
+<!-- ============ Promo Marquee ============ -->
+<section>
+  <div class="head"><span class="n">Promo Marquee</span><span class="s">1400×560 → promo-marquee-1400x560.png</span><button onclick="ex('pm','promo-marquee-1400x560.png',1400,560,this)">导出</button></div>
+  <div class="frame" id="frame-pm"><div class="canvas" id="pm" style="width:1400px;height:560px;background:linear-gradient(120deg, #1d4ed8 0%, #1e3a8a 55%, #0b1220 100%);display:flex;align-items:center;padding:0 88px;gap:64px;position:relative;overflow:hidden;">
+    <div style="position:absolute;left:-180px;top:-180px;width:620px;height:620px;border-radius:50%;background:radial-gradient(circle, rgba(96,165,250,.3) 0%, rgba(96,165,250,0) 68%);"></div>
+    <div style="width:520px;display:flex;flex-direction:column;gap:30px;position:relative;">
+      <div class="brand"><img src="assets/icon.png" width="56" height="56"><span style="font-size:30px;color:#fff;">书签清理助手</span></div>
+      <div style="font-size:68px;font-weight:900;color:#fff;line-height:1.25;">失效书签，<br>一键清理</div>
+      <div style="font-size:23px;color:rgba(255,255,255,.82);line-height:1.7;">回收站可撤销 · 每周自动备份<br>书签画像 · 时光机 · 全程本地</div>
+    </div>
+    <div style="flex:1;display:flex;justify-content:center;position:relative;"><div class="shot" style="width:600px;"><img src="assets/screenshots/01-cleanup.png"></div></div>
+  </div></div>
+</section>
+
+<script>
+const META = {
+  s1:{f:'01_hero.png',w:1280,h:800}, s2:{f:'02_safety.png',w:1280,h:800},
+  s3:{f:'03_portrait.png',w:1280,h:800}, s4:{f:'04_share.png',w:1280,h:800},
+  s5:{f:'05_trust.png',w:1280,h:800},
+  ps:{f:'promo-small-440x280.png',w:440,h:280}, pm:{f:'promo-marquee-1400x560.png',w:1400,h:560}
+};
+
+function applyZoom(z){
+  for (const id in META){
+    const c = document.getElementById(id);
+    const fr = document.getElementById('frame-'+id);
+    c.style.transform = 'scale('+z+')';
+    fr.style.width = (META[id].w*z)+'px';
+    fr.style.height = (META[id].h*z)+'px';
+  }
+}
+document.getElementById('zoom').addEventListener('input', e => applyZoom(+e.target.value));
+applyZoom(0.3);
+
+let busy = false;
+function setBusy(v){ busy=v; document.querySelectorAll('.bar button,.head button').forEach(b=>b.disabled=v); }
+
+async function ex(id, file, w, h, btn){
+  if (busy) return;
+  setBusy(true); if (btn) btn.textContent='导出中…';
+  const src = document.getElementById(id);
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:-99999px;top:0;';
+  const clone = src.cloneNode(true);
+  clone.style.transform = 'none';
+  holder.appendChild(clone);
+  document.body.appendChild(holder);
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const url = await htmlToImage.toPng(clone, {width:w, height:h, pixelRatio:1, canvasWidth:w, canvasHeight:h});
+    const a = document.createElement('a'); a.href=url; a.download=file; a.click();
+  } catch(err){
+    console.error(err); alert('导出失败: '+file+'\n'+err);
+  } finally {
+    holder.remove(); setBusy(false);
+    if (btn) btn.textContent='导出';
+  }
+}
+
+async function exportAll(){
+  for (const id in META){
+    const m = META[id];
+    await ex(id, m.f, m.w, m.h, null);
+    await new Promise(r=>setTimeout(r,400));
+  }
+}
+</script>
+</body>
+</html>

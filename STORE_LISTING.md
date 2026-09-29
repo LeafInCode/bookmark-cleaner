@@ -66,7 +66,72 @@ MIT 协议，代码公开：https://github.com/LeafInCode/bookmark-cleaner
 ```
 
 **类别**：生产力工具（Productivity）
-**语言**：中文（简体）
+**语言**：中文（简体）+ **英文（en-US，见下方第 1b 节）**
+
+---
+
+## 1b. 英文版商店信息（Store listing · en-US，Dashboard 添加语言后填）
+
+> 依据 2026-09-28 商店考古：纯中文 listing 在 "bookmark cleaner" 英文搜索零触达，
+> 品类头部（20 万用户）全在英文市场。关键词吸收自竞品差评好评区。
+
+**名称**（≤75 字符）：
+```
+Bookmark Cleaner: Fix Dead Links, Remove Duplicates
+```
+
+**简短说明（≤132 字符）**：
+```
+Find broken links, duplicates and empty folders. One-click cleanup with recycle bin, Wayback rescue and a full backup. 100% local.
+```
+
+**详细说明**：
+```
+Bookmark Cleaner — make your bookmarks usable again
+
+【Why you need it】
+After a few years of collecting, bookmarks pile up: dead links, duplicates, and pages you forgot why you saved. Browser built-in tools are weak. This extension is a safe, thorough, fully local cleanup.
+
+【Clean】
+• Broken bookmark detection (404 / network errors / timeouts, auto-categorized with reasons)
+• Duplicate finder with URL normalization — ignores tracking parameters
+• Empty folder scan (nested included)
+• Handles large collections — engineered for 10,000+ bookmarks
+• Search, filter and sort every result before you delete anything
+
+【Safe】
+• Everything goes to a local recycle bin — restore anytime
+• One-click full backup (JSON, re-importable)
+• Operation history with step-by-step undo (archive / move / rename)
+
+【Organize】
+• Move or archive dead links to any folder
+• Bulk-open and bulk-clean titles (strip " - SiteName" suffixes)
+• Exclude folders like "Archive" from scanning
+
+【Rescue】
+• Moved detection: site changed domains? Update to the new address in one click
+• Wayback rescue: check archive.org for dead links and restore the archived copy
+
+【Insights】
+• Bookmark profile: collection trends, top sites, dead-link rate, year distribution
+• Time Machine: on-this-day and random rediscovery, in a side panel or popup window
+
+【Share】
+• Export a curated selection as a themed web page (4 themes) or a long image
+
+【Automation】
+• Optional weekly incremental scan + weekly auto-backup
+• Badge shows pending items
+
+【Privacy promise】
+• 100% local: your bookmarks never leave your device — no upload, no collection, no sale
+• No account, no analytics, no ads, no third-party code
+• Sensitive permissions requested on demand, never at install
+
+【Open source】
+MIT licensed: https://github.com/LeafInCode/bookmark-cleaner
+```
 
 ---
 
