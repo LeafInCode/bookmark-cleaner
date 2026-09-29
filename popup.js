@@ -8,6 +8,7 @@ async function render() {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     el.textContent = i18n.t(el.getAttribute("data-i18n"));
   });
+  document.documentElement.classList.add("i18n-ready");
   const { scanState } = await chrome.storage.local.get({ scanState: null });
   const stats = $("#stats");
   const tree = await chrome.bookmarks.getTree();

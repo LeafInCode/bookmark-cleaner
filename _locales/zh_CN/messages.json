@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "书签清理助手"
+  },
+  "extDesc": {
+    "message": "本地清理失效/重复书签与空文件夹，支持归档、搬家检测与 Wayback 救援。全程本地运行，不上传任何数据。"
+  },
+  "extTitle": {
+    "message": "书签清理助手"
+  }
+}

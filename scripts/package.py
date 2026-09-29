@@ -13,7 +13,7 @@ files = [
     "dashboard.html", "dashboard.js", "timemachine.html", "timemachine.js",
     "privacy.html", "README.md", "LICENSE",
 ]
-dirs = ["lib", "styles", "icons"]
+dirs = ["lib", "styles", "icons", "_locales"]
 extra = ["assets/support.png"]
 
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:

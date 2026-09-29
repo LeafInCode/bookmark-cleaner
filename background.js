@@ -60,6 +60,13 @@ export function isExcludedPath(path, excluded) {
   return segments.some((seg) => excluded.includes(seg));
 }
 
+// 插件自身创建的归档夹名（两语言，小写）。无论用户设置如何，这些夹子永远排除——
+// 归档夹名跟随 UI 语言（i18n），而历史设置里可能只存了单一语言的排除列表。
+export const OWN_ARCHIVE_FOLDERS = [
+  "失效书签归档", "无法确认归档",
+  "dead bookmarks archive", "unverifiable archive",
+];
+
 async function updateBadge() {
   try {
     const state = await getScanState();
@@ -144,9 +151,10 @@ async function startScan(mode) {
   scanning = true;
   stopRequested = false;
   const settings = await getSettings();
-  const excluded = (settings.excludedFolders || [])
-    .map((s) => String(s || "").trim().toLowerCase())
-    .filter(Boolean);
+  const excluded = [...new Set([
+    ...(settings.excludedFolders || []).map((s) => String(s || "").trim().toLowerCase()).filter(Boolean),
+    ...OWN_ARCHIVE_FOLDERS,
+  ])];
   const startedAt = Date.now();
 
   const tree = await getTree();

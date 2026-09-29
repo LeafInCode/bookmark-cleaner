@@ -1,3 +1,8 @@
 .DS_Store
 *.log
 __pycache__/
+node_modules/
+store-generator/static/export.html
+bookmark-cleaner-v*.zip
+.agents/
+skills-lock.json

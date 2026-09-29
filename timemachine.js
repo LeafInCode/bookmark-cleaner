@@ -90,6 +90,7 @@ async function init() {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     el.textContent = i18n.t(el.getAttribute("data-i18n"));
   });
+  document.documentElement.classList.add("i18n-ready");
   document.documentElement.lang = i18n.getLang() === "zh" ? "zh-CN" : "en";
   await load();
   randomPicks = shuffle();

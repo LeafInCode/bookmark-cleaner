@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "Bookmark Cleaner: Fix Dead Links, Remove Duplicates"
+  },
+  "extDesc": {
+    "message": "Find broken links, duplicates and empty folders. One-click cleanup with recycle bin, Wayback rescue and full backup. 100% local."
+  },
+  "extTitle": {
+    "message": "Bookmark Cleaner"
+  }
+}

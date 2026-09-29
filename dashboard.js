@@ -110,6 +110,7 @@ function applyI18n() {
   });
   document.documentElement.lang = i18n.getLang() === "zh" ? "zh-CN" : "en";
 }
+  document.documentElement.classList.add("i18n-ready");
 
 function renderTopbar() {
   const badge = $("#trash-badge");
@@ -185,7 +186,7 @@ function renderExcludedHint() {
     el.innerHTML = "";
     return;
   }
-  el.innerHTML = `${i18n.t("excludedLabel")}: <strong>${escapeHtml(excluded.join("、"))}</strong> · <a href="#" id="open-settings">${i18n.t("settings")}</a>`;
+  el.innerHTML = `${i18n.t("excludedLabel")}: <strong>${escapeHtml(excluded.join(i18n.t("listSep")))}</strong> · <a href="#" id="open-settings">${i18n.t("settings")}</a>`;
 }
 
 function showSettings() {
@@ -667,7 +668,7 @@ function renderPortraitPanel() {
   const monthOptions = [["all", i18n.t("portraitMonthAll")]].concat(
     Array.from({ length: 12 }, (_, i) => {
       const v = String(i + 1).padStart(2, "0");
-      const label = new Date(2026, i, 1).toLocaleString(locale, { month: "long" });
+      const label = new Date(new Date().getFullYear(), i, 1).toLocaleString(locale, { month: "long" });
       return [v, label];
     })
   ).map(([v, label]) => `<option value="${v}" ${state.portraitMonth === v ? "selected" : ""}>${label}</option>`).join("");
@@ -1174,8 +1175,8 @@ function showHistory() {
         <div class="day-group">
           <div class="day-head">${escapeHtml(day)} <span class="count">${entries.length}</span></div>
           ${entries.map((e) => {
-            const titles = (e.titles || []).slice(0, 3).join("、");
-            const more = (e.titles || []).length > 3 ? ` 等 ${e.titles.length} 项` : "";
+            const titles = (e.titles || []).slice(0, 3).join(i18n.t("listSep"));
+            const more = (e.titles || []).length > 3 ? i18n.t("moreItems", { n: e.titles.length }) : "";
             const undoable = e.type !== "delete";
             return `
               <div class="trash-item">
